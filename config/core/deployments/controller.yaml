@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eventmesh-operator
+  namespace: knative-eventing
+  labels:
+    knative.dev/high-availability: "true"
+    app.kubernetes.io/component: eventmesh-operator
+    app.kubernetes.io/version: devel
+    app.kubernetes.io/name: knative-eventing
+spec:
+  selector:
+    matchLabels:
+      app: eventmesh-operator
+  template:
+    metadata:
+      labels:
+        app: eventmesh-operator
+        app.kubernetes.io/component: eventmesh-operator
+        app.kubernetes.io/version: devel
+        app.kubernetes.io/name: knative-eventing
+    spec:
+      # To avoid node becoming SPOF, spread our replicas to different nodes.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: eventmesh-operator
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+
+      serviceAccountName: eventmesh-operator
+      enableServiceLinks: false
+      containers:
+      - name: eventmesh-operator
+        terminationMessagePolicy: FallbackToLogsOnError
+        image: ko://github.com/creydr/knative-emo-poc/cmd/operator
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+
+        env:
+          - name: SYSTEM_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: probes
+            scheme: HTTP
+          #initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: probes
+            scheme: HTTP
+          #initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+        ports:
+        - name: metrics
+          containerPort: 9090
+        - name: profiling
+          containerPort: 8008
+        - name: probes
+          containerPort: 8080

@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eventmesh-webhook
+  namespace: knative-eventing
+  labels:
+    app.kubernetes.io/component: eventmesh-webhook
+    app.kubernetes.io/version: devel
+    app.kubernetes.io/name: knative-eventing
+spec:
+  selector:
+    matchLabels:
+      app: eventmesh-webhook
+  template:
+    metadata:
+      labels:
+        app: eventmesh-webhook
+        app.kubernetes.io/component: eventmesh-webhook
+        app.kubernetes.io/version: devel
+        app.kubernetes.io/name: knative-eventing
+    spec:
+      # To avoid node becoming SPOF, spread our replicas to different nodes.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: eventmesh-webhook
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+
+      serviceAccountName: eventmesh-webhook
+      enableServiceLinks: false
+      containers:
+      - name: eventmesh-webhook
+        terminationMessagePolicy: FallbackToLogsOnError
+
+        image: ko://github.com/creydr/knative-emo-poc/cmd/webhook
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 50Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
+
+        env:
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONFIG_LOGGING_NAME
+          value: config-logging
+        - name: METRICS_DOMAIN
+          value: knative.dev/eventing
+        - name: WEBHOOK_NAME
+          value: eventmesh-webhook
+        - name: WEBHOOK_PORT
+          value: "8443"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+        ports:
+        - name: https-webhook
+          containerPort: 8443
+        - name: metrics
+          containerPort: 9090
+        - name: profiling
+          containerPort: 8008
+
+        readinessProbe:
+          periodSeconds: 1
+          httpGet:
+            scheme: HTTPS
+            port: 8443
+            httpHeaders:
+            - name: k-kubelet-probe
+              value: "webhook"
+        livenessProbe:
+          periodSeconds: 1
+          httpGet:
+            scheme: HTTPS
+            port: 8443
+            httpHeaders:
+              - name: k-kubelet-probe
+                value: "webhook"
+          initialDelaySeconds: 120
+      terminationGracePeriodSeconds: 300
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: eventmesh-webhook
+    app.kubernetes.io/component: eventmesh-webhook
+    app.kubernetes.io/version: devel
+    app.kubernetes.io/name: knative-eventing
+  name: eventmesh-webhook
+  namespace: knative-eventing
+spec:
+  ports:
+    - name: https-webhook
+      port: 443
+      targetPort: 8443
+  selector:
+    app: eventmesh-webhook

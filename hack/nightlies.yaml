@@ -1,0 +1,19 @@
+- directory: ./cmd/operator/kodata/eventing-latest
+  files:
+    - eventing-core.yaml
+    - eventing-crds.yaml
+    - eventing-post-install.yaml
+    - eventing-tls-networking.yaml
+    - in-memory-channel.yaml
+    - mt-channel-broker.yaml
+  bucket: eventing
+- directory: ./cmd/operator/kodata/eventing-kafka-broker-latest
+  files:
+    - eventing-kafka-broker.yaml
+    - eventing-kafka-controller.yaml
+    - eventing-kafka-source.yaml
+    - eventing-kafka-channel.yaml
+    - eventing-kafka-sink.yaml
+    - eventing-kafka-tls-networking.yaml
+    - eventing-kafka-post-install.yaml
+  bucket: eventing-kafka-broker
