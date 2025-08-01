@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
 	mf "github.com/manifestival/manifestival"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -207,28 +208,24 @@ func sanitizeEncoderConfig(cfg zapcore.EncoderConfig) zapcore.EncoderConfig {
 
 func convertToZapLogLevel(logLevel string) (zapcore.Level, error) {
 	switch strings.ToLower(logLevel) {
-	case "trace":
+	case v1alpha1.LogLevelTrace:
 		fallthrough
-	case "debug":
+	case v1alpha1.LogLevelDebug:
 		return zapcore.DebugLevel, nil
-	case "info":
+	case v1alpha1.LogLevelInfo:
 		return zapcore.InfoLevel, nil
-	case "warn":
+	case v1alpha1.LogLevelWarn:
 		return zapcore.WarnLevel, nil
-	case "error":
+	case v1alpha1.LogLevelError:
 		return zapcore.ErrorLevel, nil
-	case "fatal":
+	case v1alpha1.LogLevelFatal:
 		return zapcore.FatalLevel, nil
 	}
 	return zapcore.InvalidLevel, fmt.Errorf("unknown log level %s", logLevel)
 }
 
 func convertToLogbackLogLevel(logLevel string) (string, error) {
-	logLevels := []string{
-		"trace", "debug", "info", "warn", "error", "fatal",
-	}
-
-	if slices.Contains(logLevels, strings.ToLower(logLevel)) {
+	if slices.Contains(v1alpha1.LogLevels, strings.ToLower(logLevel)) {
 		return strings.ToUpper(logLevel), nil
 	}
 
