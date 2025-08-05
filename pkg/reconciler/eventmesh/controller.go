@@ -9,6 +9,7 @@ import (
 	mfc "github.com/manifestival/client-go-client"
 	mf "github.com/manifestival/manifestival"
 	"go.uber.org/zap"
+	imcinformer "knative.dev/eventing/pkg/client/injection/informers/messaging/v1/inmemorychannel"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/injection"
@@ -24,6 +25,7 @@ func NewController(
 	logger := logging.FromContext(ctx)
 
 	eventMeshInformer := eventmesh.Get(ctx)
+	inmemorychannelInformer := imcinformer.Get(ctx)
 
 	mfclient, err := mfc.NewClient(injection.GetConfig(ctx))
 	if err != nil {
@@ -33,13 +35,20 @@ func NewController(
 	manifest, _ := mf.ManifestFrom(mf.Slice{}, mf.UseClient(mfclient), mf.UseLogger(mflogger))
 
 	r := &Reconciler{
-		eventMeshLister: eventMeshInformer.Lister(),
-		manifest:        manifest,
+		eventMeshLister:       eventMeshInformer.Lister(),
+		inMemoryChannelLister: inmemorychannelInformer.Lister(),
+		manifest:              manifest,
 	}
 
 	impl := eventmeshreconciler.NewImpl(ctx, r)
 
 	eventMeshInformer.Informer().AddEventHandler(controller.HandleAll(impl.Enqueue))
+
+	globalResync := func(interface{}) {
+		impl.GlobalResync(eventMeshInformer.Informer())
+	}
+
+	inmemorychannelInformer.Informer().AddEventHandler(controller.HandleAll(globalResync))
 
 	return impl
 }

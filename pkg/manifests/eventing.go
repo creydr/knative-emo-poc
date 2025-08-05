@@ -27,6 +27,12 @@ func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
 	}
 	manifests.Append(tlsManifests)
 
+	imcManifests, err := eventingIMCManifests(em)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load eventing IMC manifests: %w", err)
+	}
+	manifests.Append(imcManifests)
+
 	// ...
 
 	return manifests, nil
@@ -62,6 +68,20 @@ func eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	} else {
 		manifests.AddToDelete(tlsManifests)
 	}
+
+	return &manifests, nil
+}
+
+func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+	manifests := Manifests{}
+
+	tlsManifests, err := loadManifests("eventing-latest", "in-memory-channel.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load eventing IMC manifests: %w", err)
+	}
+
+	// TODO: only add when enabled...
+	manifests.AddToApply(tlsManifests)
 
 	return &manifests, nil
 }

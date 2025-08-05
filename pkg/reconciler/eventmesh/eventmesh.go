@@ -25,15 +25,20 @@ import (
 	eventmeshreconciler "github.com/creydr/knative-emo-poc/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
 	operatorv1alpha1listers "github.com/creydr/knative-emo-poc/pkg/client/listers/operator/v1alpha1"
 	knmf "github.com/creydr/knative-emo-poc/pkg/manifests"
+	"github.com/creydr/knative-emo-poc/pkg/manifests/transform"
 	mf "github.com/manifestival/manifestival"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"knative.dev/eventing/pkg/client/listers/messaging/v1"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/reconciler"
 )
 
 type Reconciler struct {
-	eventMeshLister operatorv1alpha1listers.EventMeshLister
-	manifest        mf.Manifest
+	eventMeshLister       operatorv1alpha1listers.EventMeshLister
+	manifest              mf.Manifest
+	inMemoryChannelLister v1.InMemoryChannelLister
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
@@ -58,6 +63,10 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 		return fmt.Errorf("failed to get EKB manifests: %w", err)
 	}
 	manifests.Append(ekbManifests)
+
+	if err := r.applyScaling(&manifests); err != nil {
+		return fmt.Errorf("failed to apply Scaling: %w", err)
+	}
 
 	// Add owner reference to EventMesh CR
 	// TODO: fix (somehow the GVK of the em are empty)
@@ -87,6 +96,39 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 	logger.Debug("Applying manifests")
 	if err := r.manifest.Append(manifests.ToApply).Apply(); err != nil {
 		return fmt.Errorf("failed to apply manifests: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Reconciler) applyScaling(manifests *knmf.Manifests) error {
+	imcs, err := r.inMemoryChannelLister.List(labels.Everything())
+	if err != nil {
+		return fmt.Errorf("failed to list all InMemoryChannels: %w", err)
+	}
+
+	if len(imcs) == 0 {
+		manifests.AddTransformers(
+			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+				"imc-dispatcher",
+				"knative-eventing",
+				0))
+		manifests.AddTransformers(
+			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+				"imc-controller",
+				"knative-eventing",
+				0))
+	} else {
+		manifests.AddTransformers(
+			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+				"imc-dispatcher",
+				"knative-eventing",
+				1))
+		manifests.AddTransformers(
+			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+				"imc-controller",
+				"knative-eventing",
+				1))
 	}
 
 	return nil
