@@ -2,13 +2,11 @@ package v1alpha1
 
 import "knative.dev/pkg/apis"
 
-var EventMeshCondSet = apis.NewLivingConditionSet(EventMeshConditionEventingInstalled, EventMeshConditionEventingKafkaBrokerInstalled)
+var EventMeshCondSet = apis.NewLivingConditionSet(EventMeshConditionEventMeshInstalled)
 
 const (
-	EventMeshConditionReady                                           = apis.ConditionReady
-	EventMeshConditionEventingInstalled            apis.ConditionType = "EventingInstalled"
-	EventMeshConditionEventingKafkaBrokerInstalled apis.ConditionType = "EventingKafkaBrokerInstalled"
-	EventMeshConditionEventingConfigured           apis.ConditionType = "EventingConfigured"
+	EventMeshConditionReady                                 = apis.ConditionReady
+	EventMeshConditionEventMeshInstalled apis.ConditionType = "EventingInstalled"
 )
 
 // GetConditionSet retrieves the condition set for this resource. Implements the KRShaped interface.
@@ -36,26 +34,10 @@ func (em *EventMeshStatus) InitializeConditions() {
 	EventMeshCondSet.Manage(em).InitializeConditions()
 }
 
-func (em *EventMeshStatus) MarkEventMeshConditionEventingInstalledEnabled() {
-	EventMeshCondSet.Manage(em).MarkTrue(EventMeshConditionEventingInstalled)
+func (em *EventMeshStatus) MarkEventMeshConditionEventMeshInstalled() {
+	EventMeshCondSet.Manage(em).MarkTrue(EventMeshConditionEventMeshInstalled)
 }
 
-func (em *EventMeshStatus) MarkEventMeshConditionEventingInstalledDisabled(reason, messageFormat string, messageA ...interface{}) {
-	EventMeshCondSet.Manage(em).MarkFalse(EventMeshConditionEventingInstalled, reason, messageFormat, messageA...)
-}
-
-func (em *EventMeshStatus) MarkEventMeshConditionEventingConfiguredEnabled() {
-	EventMeshCondSet.Manage(em).MarkTrue(EventMeshConditionEventingConfigured)
-}
-
-func (em *EventMeshStatus) MarkEventMeshConditionEventingConfiguredDisabled(reason, messageFormat string, messageA ...interface{}) {
-	EventMeshCondSet.Manage(em).MarkFalse(EventMeshConditionEventingConfigured, reason, messageFormat, messageA...)
-}
-
-func (em *EventMeshStatus) MarkEventMeshConditionEventingKafkaBrokerInstalledEnabled() {
-	EventMeshCondSet.Manage(em).MarkTrue(EventMeshConditionEventingKafkaBrokerInstalled)
-}
-
-func (em *EventMeshStatus) MarkEventMeshConditionEventingKafkaBrokerInstalledDisabled(reason, messageFormat string, messageA ...interface{}) {
-	EventMeshCondSet.Manage(em).MarkFalse(EventMeshConditionEventingKafkaBrokerInstalled, reason, messageFormat, messageA...)
+func (em *EventMeshStatus) MarkEventMeshConditionEventMeshInstalledFalse(reason, messageFormat string, messageA ...interface{}) {
+	EventMeshCondSet.Manage(em).MarkFalse(EventMeshConditionEventMeshInstalled, reason, messageFormat, messageA...)
 }

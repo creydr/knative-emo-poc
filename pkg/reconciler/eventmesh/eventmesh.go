@@ -27,18 +27,22 @@ import (
 	knmf "github.com/creydr/knative-emo-poc/pkg/manifests"
 	"github.com/creydr/knative-emo-poc/pkg/manifests/transform"
 	mf "github.com/manifestival/manifestival"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	v2 "k8s.io/client-go/listers/apps/v1"
 	"knative.dev/eventing/pkg/client/listers/messaging/v1"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/reconciler"
+	"knative.dev/pkg/system"
 )
 
 type Reconciler struct {
 	eventMeshLister       operatorv1alpha1listers.EventMeshLister
 	manifest              mf.Manifest
 	inMemoryChannelLister v1.InMemoryChannelLister
+	deploymentLister      v2.DeploymentLister
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
@@ -46,6 +50,16 @@ var _ eventmeshreconciler.Interface = (*Reconciler)(nil)
 
 func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) reconciler.Event {
 	logger := logging.FromContext(ctx)
+
+	alreadyInstalled, err := r.hasForeignEventingInstalled(ctx, em)
+	if err != nil {
+		return fmt.Errorf("could not determine whether EventMesh is installed already: %v", err)
+	}
+	if alreadyInstalled {
+		em.Status.MarkEventMeshConditionEventMeshInstalledFalse("EventingInstalledAlready", "Knative eventing components seem to be installed already and not owned by the EventMesh")
+		return nil
+	}
+
 	manifests := knmf.Manifests{}
 
 	// Get eventing manifests
@@ -98,7 +112,37 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 		return fmt.Errorf("failed to apply manifests: %w", err)
 	}
 
+	em.Status.MarkEventMeshConditionEventMeshInstalled()
+
 	return nil
+}
+
+func (r *Reconciler) hasForeignEventingInstalled(ctx context.Context, em *v1alpha1.EventMesh) (bool, error) {
+	logger := logging.FromContext(ctx)
+
+	d, err := r.deploymentLister.Deployments(system.Namespace()).Get("eventing-controller")
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to list deployments: %w", err)
+	}
+
+	if d.OwnerReferences != nil {
+		eventMeshGVK := v1alpha1.SchemeGroupVersion.WithKind("EventMesh")
+		for _, owner := range d.OwnerReferences {
+			if owner.Kind == eventMeshGVK.Kind &&
+				owner.APIVersion == eventMeshGVK.GroupVersion().String() &&
+				owner.Name == em.GetName() {
+				// the eventing-controller is owned by the EventMesh already
+
+				return false, nil
+			}
+		}
+	}
+
+	logger.Warnf("Found eventing-controller deployment which got not installed from EventMesh operator: %v", d.ObjectMeta)
+	return true, nil
 }
 
 func (r *Reconciler) applyScaling(manifests *knmf.Manifests) error {

@@ -10,6 +10,7 @@ import (
 	mf "github.com/manifestival/manifestival"
 	"go.uber.org/zap"
 	imcinformer "knative.dev/eventing/pkg/client/injection/informers/messaging/v1/inmemorychannel"
+	deploymentinformer "knative.dev/pkg/client/injection/kube/informers/apps/v1/deployment"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/injection"
@@ -26,6 +27,7 @@ func NewController(
 
 	eventMeshInformer := eventmesh.Get(ctx)
 	inmemorychannelInformer := imcinformer.Get(ctx)
+	deploymentInformer := deploymentinformer.Get(ctx)
 
 	mfclient, err := mfc.NewClient(injection.GetConfig(ctx))
 	if err != nil {
@@ -37,6 +39,7 @@ func NewController(
 	r := &Reconciler{
 		eventMeshLister:       eventMeshInformer.Lister(),
 		inMemoryChannelLister: inmemorychannelInformer.Lister(),
+		deploymentLister:      deploymentInformer.Lister(),
 		manifest:              manifest,
 	}
 
