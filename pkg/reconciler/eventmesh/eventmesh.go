@@ -40,11 +40,10 @@ import (
 )
 
 type Reconciler struct {
-	eventMeshLister       operatorv1alpha1listers.EventMeshLister
-	manifest              mf.Manifest
-	inMemoryChannelLister messagingv1listers.InMemoryChannelLister
-	imcLister             *atomic.Pointer[messagingv1listers.InMemoryChannelLister]
-	deploymentLister      appsv1listers.DeploymentLister
+	eventMeshLister  operatorv1alpha1listers.EventMeshLister
+	deploymentLister appsv1listers.DeploymentLister
+	dynamicImcLister *atomic.Pointer[messagingv1listers.InMemoryChannelLister]
+	manifest         mf.Manifest
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
@@ -150,14 +149,11 @@ func (r *Reconciler) hasForeignEventingInstalled(ctx context.Context, em *v1alph
 func (r *Reconciler) applyScaling(manifests *knmf.Manifests) error {
 	var scaleTarget int
 
-	// TODO: add mutex check
-	imcLister := r.imcLister.Load()
-	//if r.inMemoryChannelLister == nil {
+	imcLister := r.dynamicImcLister.Load()
 	if imcLister == nil || *imcLister == nil {
 		// no imc lister registered so far (probably because no IMC CRD is installed yet)
 		scaleTarget = 0
 	} else {
-		//imcs, err := r.inMemoryChannelLister.List(labels.Everything())
 		imcs, err := (*imcLister).List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("failed to list all InMemoryChannels: %w", err)
