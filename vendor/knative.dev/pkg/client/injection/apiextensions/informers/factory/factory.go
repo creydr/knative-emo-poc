@@ -1,11 +1,11 @@
 /*
-Copyright 2021 The Knative Authors
+Copyright 2022 The Knative Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-	http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,8 +21,8 @@ package factory
 import (
 	context "context"
 
-	externalversions "knative.dev/eventing/pkg/client/informers/externalversions"
-	client "knative.dev/eventing/pkg/client/injection/client"
+	externalversions "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	client "knative.dev/pkg/client/injection/apiextensions/client"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
@@ -50,7 +50,7 @@ func Get(ctx context.Context) externalversions.SharedInformerFactory {
 	untyped := ctx.Value(Key{})
 	if untyped == nil {
 		logging.FromContext(ctx).Panic(
-			"Unable to fetch knative.dev/eventing/pkg/client/informers/externalversions.SharedInformerFactory from context.")
+			"Unable to fetch k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions.SharedInformerFactory from context.")
 	}
 	return untyped.(externalversions.SharedInformerFactory)
 }

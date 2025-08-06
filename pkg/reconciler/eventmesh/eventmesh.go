@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
 	eventmeshreconciler "github.com/creydr/knative-emo-poc/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
@@ -31,8 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	v2 "k8s.io/client-go/listers/apps/v1"
-	"knative.dev/eventing/pkg/client/listers/messaging/v1"
+	appsv1listers "k8s.io/client-go/listers/apps/v1"
+	messagingv1listers "knative.dev/eventing/pkg/client/listers/messaging/v1"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/reconciler"
 	"knative.dev/pkg/system"
@@ -41,8 +42,9 @@ import (
 type Reconciler struct {
 	eventMeshLister       operatorv1alpha1listers.EventMeshLister
 	manifest              mf.Manifest
-	inMemoryChannelLister v1.InMemoryChannelLister
-	deploymentLister      v2.DeploymentLister
+	inMemoryChannelLister messagingv1listers.InMemoryChannelLister
+	imcLister             *atomic.Pointer[messagingv1listers.InMemoryChannelLister]
+	deploymentLister      appsv1listers.DeploymentLister
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
@@ -146,34 +148,38 @@ func (r *Reconciler) hasForeignEventingInstalled(ctx context.Context, em *v1alph
 }
 
 func (r *Reconciler) applyScaling(manifests *knmf.Manifests) error {
-	imcs, err := r.inMemoryChannelLister.List(labels.Everything())
-	if err != nil {
-		return fmt.Errorf("failed to list all InMemoryChannels: %w", err)
+	var scaleTarget int
+
+	// TODO: add mutex check
+	imcLister := r.imcLister.Load()
+	//if r.inMemoryChannelLister == nil {
+	if imcLister == nil || *imcLister == nil {
+		// no imc lister registered so far (probably because no IMC CRD is installed yet)
+		scaleTarget = 0
+	} else {
+		//imcs, err := r.inMemoryChannelLister.List(labels.Everything())
+		imcs, err := (*imcLister).List(labels.Everything())
+		if err != nil {
+			return fmt.Errorf("failed to list all InMemoryChannels: %w", err)
+		}
+
+		if len(imcs) == 0 {
+			scaleTarget = 0
+		} else {
+			scaleTarget = 1
+		}
 	}
 
-	if len(imcs) == 0 {
-		manifests.AddTransformers(
-			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-				"imc-dispatcher",
-				"knative-eventing",
-				0))
-		manifests.AddTransformers(
-			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-				"imc-controller",
-				"knative-eventing",
-				0))
-	} else {
-		manifests.AddTransformers(
-			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-				"imc-dispatcher",
-				"knative-eventing",
-				1))
-		manifests.AddTransformers(
-			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-				"imc-controller",
-				"knative-eventing",
-				1))
-	}
+	manifests.AddTransformers(
+		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+			"imc-dispatcher",
+			"knative-eventing",
+			scaleTarget))
+	manifests.AddTransformers(
+		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+			"imc-controller",
+			"knative-eventing",
+			scaleTarget))
 
 	return nil
 }
