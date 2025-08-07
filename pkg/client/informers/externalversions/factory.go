@@ -23,13 +23,13 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/creydr/knative-emo-poc/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions/internalinterfaces"
-	operator "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions/operator"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
+	versioned "knative.dev/eventmesh-operator/pkg/client/clientset/versioned"
+	internalinterfaces "knative.dev/eventmesh-operator/pkg/client/informers/externalversions/internalinterfaces"
+	operator "knative.dev/eventmesh-operator/pkg/client/informers/externalversions/operator"
 )
 
 // SharedInformerOption defines the functional option type for SharedInformerFactory.

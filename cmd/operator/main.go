@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/creydr/knative-emo-poc/pkg/reconciler/eventmesh"
+	"knative.dev/eventmesh-operator/pkg/reconciler/eventmesh"
 	"knative.dev/pkg/injection/sharedmain"
 	"knative.dev/pkg/signals"
 )

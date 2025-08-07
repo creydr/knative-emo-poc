@@ -22,14 +22,14 @@ import (
 	context "context"
 	time "time"
 
-	apisoperatorv1alpha1 "github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
-	versioned "github.com/creydr/knative-emo-poc/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions/internalinterfaces"
-	operatorv1alpha1 "github.com/creydr/knative-emo-poc/pkg/client/listers/operator/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
+	apisoperatorv1alpha1 "knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
+	versioned "knative.dev/eventmesh-operator/pkg/client/clientset/versioned"
+	internalinterfaces "knative.dev/eventmesh-operator/pkg/client/informers/externalversions/internalinterfaces"
+	operatorv1alpha1 "knative.dev/eventmesh-operator/pkg/client/listers/operator/v1alpha1"
 )
 
 // EventMeshInformer provides access to a shared informer and lister for

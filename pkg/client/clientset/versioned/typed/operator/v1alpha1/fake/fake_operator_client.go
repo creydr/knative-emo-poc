@@ -19,9 +19,9 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/creydr/knative-emo-poc/pkg/client/clientset/versioned/typed/operator/v1alpha1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
+	v1alpha1 "knative.dev/eventmesh-operator/pkg/client/clientset/versioned/typed/operator/v1alpha1"
 )
 
 type FakeOperatorV1alpha1 struct {

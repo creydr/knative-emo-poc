@@ -21,8 +21,8 @@ package eventmesh
 import (
 	context "context"
 
-	v1alpha1 "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions/operator/v1alpha1"
-	factory "github.com/creydr/knative-emo-poc/pkg/client/injection/informers/factory"
+	v1alpha1 "knative.dev/eventmesh-operator/pkg/client/informers/externalversions/operator/v1alpha1"
+	factory "knative.dev/eventmesh-operator/pkg/client/injection/informers/factory"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
@@ -46,7 +46,7 @@ func Get(ctx context.Context) v1alpha1.EventMeshInformer {
 	untyped := ctx.Value(Key{})
 	if untyped == nil {
 		logging.FromContext(ctx).Panic(
-			"Unable to fetch github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions/operator/v1alpha1.EventMeshInformer from context.")
+			"Unable to fetch knative.dev/eventmesh-operator/pkg/client/informers/externalversions/operator/v1alpha1.EventMeshInformer from context.")
 	}
 	return untyped.(v1alpha1.EventMeshInformer)
 }

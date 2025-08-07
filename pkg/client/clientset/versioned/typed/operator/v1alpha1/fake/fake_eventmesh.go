@@ -19,9 +19,9 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
-	operatorv1alpha1 "github.com/creydr/knative-emo-poc/pkg/client/clientset/versioned/typed/operator/v1alpha1"
 	gentype "k8s.io/client-go/gentype"
+	v1alpha1 "knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
+	operatorv1alpha1 "knative.dev/eventmesh-operator/pkg/client/clientset/versioned/typed/operator/v1alpha1"
 )
 
 // fakeEventMeshes implements EventMeshInterface

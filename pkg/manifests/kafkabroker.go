@@ -3,9 +3,9 @@ package manifests
 import (
 	"fmt"
 
-	"github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
-	"github.com/creydr/knative-emo-poc/pkg/manifests/transform"
 	mf "github.com/manifestival/manifestival"
+	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
+	"knative.dev/eventmesh-operator/pkg/manifests/transform"
 )
 
 func ForEventingKafkaBroker(em *v1alpha1.EventMesh) (*Manifests, error) {

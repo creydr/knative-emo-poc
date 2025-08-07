@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
-	"github.com/creydr/knative-emo-poc/pkg/manifests/transform"
 	mf "github.com/manifestival/manifestival"
 	"knative.dev/eventing/pkg/apis/feature"
+	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
+	"knative.dev/eventmesh-operator/pkg/manifests/transform"
 )
 
 // ForEventing returns the configured manifests for eventing

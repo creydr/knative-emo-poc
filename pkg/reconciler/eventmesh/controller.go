@@ -3,9 +3,6 @@ package eventmesh
 import (
 	"context"
 
-	eventmeshinformer "github.com/creydr/knative-emo-poc/pkg/client/injection/informers/operator/v1alpha1/eventmesh"
-	eventmeshreconciler "github.com/creydr/knative-emo-poc/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
-	"github.com/creydr/knative-emo-poc/pkg/dynamicinformer"
 	"github.com/go-logr/zapr"
 	mfc "github.com/manifestival/client-go-client"
 	mf "github.com/manifestival/manifestival"
@@ -14,6 +11,9 @@ import (
 	eventinginformers "knative.dev/eventing/pkg/client/informers/externalversions"
 	eventingclient "knative.dev/eventing/pkg/client/injection/client"
 	messagingv1listers "knative.dev/eventing/pkg/client/listers/messaging/v1"
+	eventmeshinformer "knative.dev/eventmesh-operator/pkg/client/injection/informers/operator/v1alpha1/eventmesh"
+	eventmeshreconciler "knative.dev/eventmesh-operator/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
+	"knative.dev/eventmesh-operator/pkg/dynamicinformer"
 	crdinformer "knative.dev/pkg/client/injection/apiextensions/informers/apiextensions/v1/customresourcedefinition"
 	deploymentinformer "knative.dev/pkg/client/injection/kube/informers/apps/v1/deployment"
 	"knative.dev/pkg/configmap"

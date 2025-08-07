@@ -21,9 +21,9 @@ package v1alpha1
 import (
 	http "net/http"
 
-	operatorv1alpha1 "github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
-	scheme "github.com/creydr/knative-emo-poc/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
+	operatorv1alpha1 "knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
+	scheme "knative.dev/eventmesh-operator/pkg/client/clientset/versioned/scheme"
 )
 
 type OperatorV1alpha1Interface interface {

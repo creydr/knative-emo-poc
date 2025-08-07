@@ -19,8 +19,8 @@ limitations under the License.
 package operator
 
 import (
-	internalinterfaces "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions/operator/v1alpha1"
+	internalinterfaces "knative.dev/eventmesh-operator/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "knative.dev/eventmesh-operator/pkg/client/informers/externalversions/operator/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

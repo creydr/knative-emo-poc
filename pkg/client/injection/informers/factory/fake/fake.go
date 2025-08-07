@@ -21,9 +21,9 @@ package fake
 import (
 	context "context"
 
-	externalversions "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions"
-	fake "github.com/creydr/knative-emo-poc/pkg/client/injection/client/fake"
-	factory "github.com/creydr/knative-emo-poc/pkg/client/injection/informers/factory"
+	externalversions "knative.dev/eventmesh-operator/pkg/client/informers/externalversions"
+	fake "knative.dev/eventmesh-operator/pkg/client/injection/client/fake"
+	factory "knative.dev/eventmesh-operator/pkg/client/injection/informers/factory"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 )

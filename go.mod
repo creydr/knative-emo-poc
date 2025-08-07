@@ -1,4 +1,4 @@
-module github.com/creydr/knative-emo-poc
+module knative.dev/eventmesh-operator
 
 go 1.24.5
 

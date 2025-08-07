@@ -21,12 +21,12 @@ package v1alpha1
 import (
 	context "context"
 
-	operatorv1alpha1 "github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
-	scheme "github.com/creydr/knative-emo-poc/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	gentype "k8s.io/client-go/gentype"
+	operatorv1alpha1 "knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
+	scheme "knative.dev/eventmesh-operator/pkg/client/clientset/versioned/scheme"
 )
 
 // EventMeshesGetter has a method to return a EventMeshInterface.

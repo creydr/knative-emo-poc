@@ -36,7 +36,7 @@ spec:
       containers:
       - name: eventmesh-operator
         terminationMessagePolicy: FallbackToLogsOnError
-        image: ko://github.com/creydr/knative-emo-poc/cmd/operator
+        image: ko://knative.dev/eventmesh-operator/cmd/operator
 
         resources:
           requests:

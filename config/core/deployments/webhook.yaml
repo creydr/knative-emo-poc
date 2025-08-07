@@ -36,7 +36,7 @@ spec:
       - name: eventmesh-webhook
         terminationMessagePolicy: FallbackToLogsOnError
 
-        image: ko://github.com/creydr/knative-emo-poc/cmd/webhook
+        image: ko://knative.dev/eventmesh-operator/cmd/webhook
 
         resources:
           requests:

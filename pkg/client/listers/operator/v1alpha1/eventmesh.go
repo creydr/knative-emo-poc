@@ -19,10 +19,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	operatorv1alpha1 "github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	listers "k8s.io/client-go/listers"
 	cache "k8s.io/client-go/tools/cache"
+	operatorv1alpha1 "knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 )
 
 // EventMeshLister helps list EventMeshes.

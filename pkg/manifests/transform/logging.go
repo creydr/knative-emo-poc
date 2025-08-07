@@ -7,13 +7,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
 	mf "github.com/manifestival/manifestival"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes/scheme"
+	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/system"
 )

@@ -21,10 +21,10 @@ package fakeFilteredFactory
 import (
 	context "context"
 
-	externalversions "github.com/creydr/knative-emo-poc/pkg/client/informers/externalversions"
-	fake "github.com/creydr/knative-emo-poc/pkg/client/injection/client/fake"
-	filtered "github.com/creydr/knative-emo-poc/pkg/client/injection/informers/factory/filtered"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	externalversions "knative.dev/eventmesh-operator/pkg/client/informers/externalversions"
+	fake "knative.dev/eventmesh-operator/pkg/client/injection/client/fake"
+	filtered "knative.dev/eventmesh-operator/pkg/client/injection/informers/factory/filtered"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"

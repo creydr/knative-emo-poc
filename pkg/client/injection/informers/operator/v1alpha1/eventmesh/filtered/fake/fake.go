@@ -21,8 +21,8 @@ package fake
 import (
 	context "context"
 
-	factoryfiltered "github.com/creydr/knative-emo-poc/pkg/client/injection/informers/factory/filtered"
-	filtered "github.com/creydr/knative-emo-poc/pkg/client/injection/informers/operator/v1alpha1/eventmesh/filtered"
+	factoryfiltered "knative.dev/eventmesh-operator/pkg/client/injection/informers/factory/filtered"
+	filtered "knative.dev/eventmesh-operator/pkg/client/injection/informers/operator/v1alpha1/eventmesh/filtered"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"

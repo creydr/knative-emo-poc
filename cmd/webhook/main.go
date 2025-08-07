@@ -15,8 +15,8 @@ import (
 	"knative.dev/pkg/webhook/resourcesemantics/defaulting"
 	"knative.dev/pkg/webhook/resourcesemantics/validation"
 
-	eventmeshv1alpha1 "github.com/creydr/knative-emo-poc/pkg/apis/operator/v1alpha1"
-	versionedscheme "github.com/creydr/knative-emo-poc/pkg/client/clientset/versioned/scheme"
+	eventmeshv1alpha1 "knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
+	versionedscheme "knative.dev/eventmesh-operator/pkg/client/clientset/versioned/scheme"
 )
 
 func init() {
