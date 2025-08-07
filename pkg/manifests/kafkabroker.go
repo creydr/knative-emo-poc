@@ -32,7 +32,10 @@ func eventingKafkaBrokerCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error
 	}
 	manifests.AddToApply(coreManifests)
 
-	manifests.AddTransformers(transform.KafkaLogging(em.Spec.LogLevel))
+	manifests.AddTransformers(
+		transform.KafkaLogging(em.Spec.LogLevel),
+		transform.BootstrapServers(em.Spec.Kafka.BootstrapServers),
+	)
 
 	return &manifests, nil
 }
