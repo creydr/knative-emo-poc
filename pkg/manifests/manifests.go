@@ -45,6 +45,11 @@ func (m *Manifests) TransformToDelete() error {
 	return nil
 }
 
+func (m *Manifests) Sort() {
+	m.ToApply = m.ToApply.Sort(mf.ByKindPriority())
+	m.ToDelete = m.ToDelete.Sort(mf.ByKindPriority()) //sort it here. m.Delete() will delete in reverse order
+}
+
 func (m *Manifests) Append(manifests *Manifests) {
 	m.AddToApply(manifests.ToApply)
 	m.AddToDelete(manifests.ToDelete)

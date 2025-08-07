@@ -18,6 +18,7 @@ See [CHANGELOG.md](CHANGELOG.md)
   * [Sources](#sources)
   * [Append](#append)
   * [Filter](#filter)
+  * [Sort](#sort)
   * [Transform](#transform)
 * [Applying Manifests](#applying-manifests)
   * [Client](#client)
@@ -32,7 +33,7 @@ See [CHANGELOG.md](CHANGELOG.md)
 
 Manifests may be constructed from a variety of sources. Once created,
 they are immutable, but new instances may be created from them using
-their [Append], [Filter] and [Transform] functions.
+their [Append], [Filter], [Sort] and [Transform] functions.
 
 The typical way to create a manifest is by calling `NewManifest`
 
@@ -145,6 +146,25 @@ modifications made to any resource will be reflected in the returned
 `Manifest` is with its `Transform` method.
 
 
+### Sort
+
+[Sort] enables you to reorder the resources in a manifest. This is particularly useful 
+for ensuring Kubernetes resources are applied in the correct dependency order, 
+such as applying Namespaces before namespaced resources, or ServiceAccounts before 
+Deployments use them.
+
+For Kubernetes dependency-aware sorting, use the provided `ByKindPriority()` function:
+
+```go
+// Sort by Kubernetes deployment dependencies
+// (Namespaces first, then ServiceAccounts, Secrets, ConfigMaps, etc.)
+sorted := manifest.Sort(ByKindPriority())
+```
+
+The `ByKindPriority()` function orders resources according to standard Kubernetes 
+best practices, ensuring that foundational resources like Namespaces and 
+CustomResourceDefinitions are deployed before resources that depend on them.
+
 ### Transform
 
 [Transform] will apply some function to every resource in your
@@ -209,13 +229,16 @@ differences using `DryRun`, and occasionally it's even helpful to
 invoke the manifest's `Client` directly...
 
 ```go
-manifest.Apply()
-manifest.Filter(NoCRDs).Delete()
+manifest.Apply(ctx)
+manifest.Filter(NoCRDs).Delete(ctx)
 
 u := manifest.Resources()[0]
 u.SetName("foo")
-manifest.Client.Create(&u)
+manifest.Client.Create(ctx, &u)
 ```
+
+Functions that access the k8s API require a [Context](https://pkg.go.dev/context)
+object.
 
 #### fake.Client
 
@@ -226,7 +249,7 @@ override in your unit tests. For example,
 func verifySomething(t *testing.T, expected *unstructured.Unstructured) {
     client := fake.Client{
         fake.Stubs{
-            Create: func(u *unstructured.Unstructured) error {
+            Create: func(ctx context.Context, u *unstructured.Unstructured) error {
                 if !reflect.DeepEqual(u, expected) {
                     t.Error("You did it wrong!")
                 }
@@ -235,7 +258,8 @@ func verifySomething(t *testing.T, expected *unstructured.Unstructured) {
         },
     }
     manifest, _ := NewManifest("testdata/some.yaml", UseClient(client))
-    callSomethingThatUltimatelyAppliesThis(manifest)
+    ctx := context.Background()
+    callSomethingThatUltimatelyAppliesThis(ctx, manifest)
 }
 ```
 
@@ -247,9 +271,26 @@ function:
 ```go
 client := fake.New()
 current, _ := NewManifest("testdata/current.yaml", UseClient(client))
-current.Apply()
+current.Apply(ctx)
 modified, _ := NewManifest("testdata/modified.yaml", UseClient(client))
-diffs, err := modified.DryRun()
+diffs, err := modified.DryRun(ctx)
+```
+
+The default fake Client returns an error if the provided context is cancelled
+or its deadline is exceeded. This can be used to simulate network timeouts or
+graceful termination scenarios:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+client := fake.New()
+current, _ := NewManifest("testdata/current.yaml", UseClient(client))
+current.Apply(ctx)
+cancel()
+modified, _ := NewManifest("testdata/modified.yaml", UseClient(client))
+diffs, err := modified.DryRun(ctx)
+if err != context.Canceled {
+    t.Errorf("Expected to receive context canceled, got %v")
+}
 ```
 
 ### Logging
@@ -260,6 +301,21 @@ option, like so:
 
 ```go
 m, _ := NewManifest(path, UseLogger(log.WithName("manifestival")), UseClient(c))
+```
+
+### Last Applied Configuration Annotation
+
+Upon creation or modification, Manifestival records the contents of the object
+in an annotation. This allows future updates to remove obsolete fields and
+values automatically. By default, the name of this annotation is
+`kubectl.kubernetes.io/last-applied-configuration` which is the same name used
+by `kubectl` and applications which use `kubectl` to apply object values. If
+desired, the annotation name can be changed so that Manifestival-applied fields
+won't interfere with non-conflicting, `kubectl`-applied fields (or vice-versa).
+The annotation name is set like this:
+
+```go
+m, _ := NewManifest(path, UseLastAppliedConfigAnnotation("myapp.example.com/last-applied-configuration"))
 ```
 
 ### Apply

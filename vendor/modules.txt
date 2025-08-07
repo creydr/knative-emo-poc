@@ -142,12 +142,12 @@ github.com/kelseyhightower/envconfig
 github.com/mailru/easyjson/buffer
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
-# github.com/manifestival/client-go-client v0.6.0
+# github.com/manifestival/client-go-client v0.6.0 => github.com/manifestival/client-go-client v0.6.1-0.20240501171814-824fb1db1ad3
 ## explicit; go 1.15
 github.com/manifestival/client-go-client
 github.com/manifestival/client-go-client/pkg/dynamic
-# github.com/manifestival/manifestival v0.7.2
-## explicit; go 1.15
+# github.com/manifestival/manifestival v0.7.3-0.20240423164312-c22dbe524c64 => github.com/creydr/manifestival v0.0.0-20250806154118-6bb74741b06a
+## explicit; go 1.19
 github.com/manifestival/manifestival
 github.com/manifestival/manifestival/internal/overlay
 github.com/manifestival/manifestival/internal/patch
@@ -1200,3 +1200,5 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.22
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
+# github.com/manifestival/client-go-client => github.com/manifestival/client-go-client v0.6.1-0.20240501171814-824fb1db1ad3
+# github.com/manifestival/manifestival => github.com/creydr/manifestival v0.0.0-20250806154118-6bb74741b06a

@@ -99,9 +99,12 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 		return fmt.Errorf("failed to transform eventing manifests to delete: %w", err)
 	}
 
+	logger.Debug("Sort manifests for k8s order")
+	manifests.Sort()
+
 	// Delete old manifests
 	logger.Debug("Deleting unneeded manifests")
-	if err := r.manifest.Append(manifests.ToDelete).Delete(mf.IgnoreNotFound(true)); err != nil {
+	if err := r.manifest.Append(manifests.ToDelete).Delete(ctx, mf.IgnoreNotFound(true)); err != nil {
 		if !meta.IsNoMatchError(err) && !strings.Contains(err.Error(), "failed to get API group resources") {
 			return fmt.Errorf("failed to delete manifests: %w", err)
 		}
@@ -109,7 +112,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 
 	// Apply manifests
 	logger.Debug("Applying manifests")
-	if err := r.manifest.Append(manifests.ToApply).Apply(); err != nil {
+	if err := r.manifest.Append(manifests.ToApply).Apply(ctx); err != nil {
 		return fmt.Errorf("failed to apply manifests: %w", err)
 	}
 

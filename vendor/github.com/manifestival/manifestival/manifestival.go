@@ -1,6 +1,7 @@
 package manifestival
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -15,25 +16,28 @@ import (
 // resources (typically, a set of YAML files, aka a manifest)
 type Manifestival interface {
 	// Either updates or creates all resources in the manifest
-	Apply(opts ...ApplyOption) error
+	Apply(ctx context.Context, opts ...ApplyOption) error
 	// Deletes all resources in the manifest
-	Delete(opts ...DeleteOption) error
+	Delete(ctx context.Context, opts ...DeleteOption) error
 	// Transforms the resources within a Manifest
 	Transform(fns ...Transformer) (Manifest, error)
 	// Filters resources in a Manifest; Predicates are AND'd
 	Filter(fns ...Predicate) Manifest
 	// Append the resources from other Manifests to create a new one
 	Append(mfs ...Manifest) Manifest
+	// Sort the resources in a Manifest
+	Sort(lessFunc LessFunc) Manifest
 	// Show how applying the manifest would change the cluster
-	DryRun() ([]MergePatch, error)
+	DryRun(ctx context.Context) ([]MergePatch, error)
 }
 
 // Manifest tracks a set of concrete resources which should be managed as a
 // group using a Kubernetes client
 type Manifest struct {
-	resources []unstructured.Unstructured
-	Client    Client
-	log       logr.Logger
+	resources                   []unstructured.Unstructured
+	Client                      Client
+	log                         logr.Logger
+	lastAppliedConfigAnnotation string
 }
 
 var _ Manifestival = &Manifest{}
@@ -55,6 +59,14 @@ func UseClient(client Client) Option {
 	}
 }
 
+// UseLastAppliedConfigAnnotation sets an alternate name for the annotation used to track the last applied configuration (defaults to kubectl.kubernetes.io/last-applied-configuration)
+// annotationName is a value specific to your application such as myapp.example.com/last-applied-configuration
+func UseLastAppliedConfigAnnotation(annotationName string) Option {
+	return func(m *Manifest) {
+		m.lastAppliedConfigAnnotation = annotationName
+	}
+}
+
 // NewManifest creates a Manifest from a comma-separated set of YAML
 // files, directories, or URLs. It's equivalent to
 // `ManifestFrom(Path(pathname))`
@@ -64,7 +76,7 @@ func NewManifest(pathname string, opts ...Option) (Manifest, error) {
 
 // ManifestFrom creates a Manifest from any Source implementation
 func ManifestFrom(src Source, opts ...Option) (m Manifest, err error) {
-	m = Manifest{log: logr.Discard()}
+	m = Manifest{log: logr.Discard(), lastAppliedConfigAnnotation: v1.LastAppliedConfigAnnotation}
 	for _, opt := range opts {
 		opt(&m)
 	}
@@ -95,9 +107,9 @@ func (m Manifest) Resources() []unstructured.Unstructured {
 }
 
 // Apply updates or creates all resources in the manifest.
-func (m Manifest) Apply(opts ...ApplyOption) error {
+func (m Manifest) Apply(ctx context.Context, opts ...ApplyOption) error {
 	for _, spec := range m.resources {
-		if err := m.apply(&spec, opts...); err != nil {
+		if err := m.apply(ctx, &spec, opts...); err != nil {
 			return err
 		}
 	}
@@ -105,7 +117,7 @@ func (m Manifest) Apply(opts ...ApplyOption) error {
 }
 
 // Delete removes all resources in the Manifest
-func (m Manifest) Delete(opts ...DeleteOption) error {
+func (m Manifest) Delete(ctx context.Context, opts ...DeleteOption) error {
 	a := make([]unstructured.Unstructured, len(m.resources))
 	copy(a, m.resources) // shallow copy is fine
 	// we want to delete in reverse order
@@ -113,7 +125,7 @@ func (m Manifest) Delete(opts ...DeleteOption) error {
 		a[left], a[right] = a[right], a[left]
 	}
 	for _, spec := range a {
-		if err := m.delete(&spec, opts...); err != nil {
+		if err := m.delete(ctx, &spec, opts...); err != nil {
 			return err
 		}
 	}
@@ -121,8 +133,8 @@ func (m Manifest) Delete(opts ...DeleteOption) error {
 }
 
 // apply updates or creates a particular resource
-func (m Manifest) apply(spec *unstructured.Unstructured, opts ...ApplyOption) error {
-	current, err := m.get(spec)
+func (m Manifest) apply(ctx context.Context, spec *unstructured.Unstructured, opts ...ApplyOption) error {
+	current, err := m.get(ctx, spec)
 	if err != nil {
 		return err
 	}
@@ -130,10 +142,10 @@ func (m Manifest) apply(spec *unstructured.Unstructured, opts ...ApplyOption) er
 		m.logResource("Creating", spec)
 		current = spec.DeepCopy()
 		annotate(current, "manifestival", resourceCreated)
-		annotate(current, v1.LastAppliedConfigAnnotation, lastApplied(current))
-		return m.Client.Create(current, opts...)
+		annotate(current, m.lastAppliedConfigAnnotation, lastApplied(current, m.lastAppliedConfigAnnotation))
+		return m.Client.Create(ctx, current, opts...)
 	} else {
-		diff, err := patch.New(current, spec)
+		diff, err := patch.New(current, spec, m.lastAppliedConfigAnnotation)
 		if err != nil {
 			return err
 		}
@@ -152,29 +164,29 @@ func (m Manifest) apply(spec *unstructured.Unstructured, opts ...ApplyOption) er
 			annotate(current, "manifestival", resourceCreated)
 		}
 
-		return m.update(current, spec, opts...)
+		return m.update(ctx, current, spec, opts...)
 	}
 }
 
 // update a single resource
-func (m Manifest) update(live, spec *unstructured.Unstructured, opts ...ApplyOption) error {
+func (m Manifest) update(ctx context.Context, live, spec *unstructured.Unstructured, opts ...ApplyOption) error {
 	m.logResource("Updating", live)
-	annotate(live, v1.LastAppliedConfigAnnotation, lastApplied(spec))
-	err := m.Client.Update(live, opts...)
+	annotate(live, m.lastAppliedConfigAnnotation, lastApplied(spec, m.lastAppliedConfigAnnotation))
+	err := m.Client.Update(ctx, live, opts...)
 	if errors.IsInvalid(err) && ApplyWith(opts).Overwrite {
 		m.log.Error(err, "Failed to update merged resource, trying overwrite")
 		overlay.Copy(spec.Object, live.Object)
-		return m.Client.Update(live, opts...)
+		return m.Client.Update(ctx, live, opts...)
 	}
 	return err
 }
 
 // delete removes the specified object
-func (m Manifest) delete(spec *unstructured.Unstructured, opts ...DeleteOption) error {
-	current, err := m.get(spec)
-    if err != nil {
-        return err
-    }
+func (m Manifest) delete(ctx context.Context, spec *unstructured.Unstructured, opts ...DeleteOption) error {
+	current, err := m.get(ctx, spec)
+	if err != nil {
+		return err
+	}
 	if current == nil {
 		return nil
 	}
@@ -182,17 +194,17 @@ func (m Manifest) delete(spec *unstructured.Unstructured, opts ...DeleteOption) 
 		return nil
 	}
 	m.logResource("Deleting", spec)
-	return m.Client.Delete(spec, opts...)
+	return m.Client.Delete(ctx, spec, opts...)
 }
 
 // get collects a full resource body (or `nil`) from a partial
 // resource supplied in `spec`
-func (m Manifest) get(spec *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (m Manifest) get(ctx context.Context, spec *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	if spec.GetName() == "" && spec.GetGenerateName() != "" {
 		// expected to be created; never fetched
 		return nil, nil
 	}
-	result, err := m.Client.Get(spec)
+	result, err := m.Client.Get(ctx, spec)
 	if err != nil {
 		result = nil
 		if errors.IsNotFound(err) {
@@ -219,10 +231,10 @@ func annotate(spec *unstructured.Unstructured, key string, value string) {
 }
 
 // lastApplied returns a JSON string denoting the resource's state
-func lastApplied(obj *unstructured.Unstructured) string {
+func lastApplied(obj *unstructured.Unstructured, annotationName string) string {
 	ann := obj.GetAnnotations()
 	if len(ann) > 0 {
-		delete(ann, v1.LastAppliedConfigAnnotation)
+		delete(ann, annotationName)
 		obj.SetAnnotations(ann)
 	}
 	bytes, _ := obj.MarshalJSON()
