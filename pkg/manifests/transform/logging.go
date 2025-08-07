@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
 
 	mf "github.com/manifestival/manifestival"
@@ -68,41 +67,35 @@ func KafkaLogging(logLevel string) mf.Transformer {
 			return fmt.Errorf("error converting unstructured to configmap: %w", err)
 		}
 
-		// Get the XML configuration
-		configXML, exists := cm.Data["config.xml"]
-		if !exists {
-			return fmt.Errorf("config.xml not found in kafka-config-logging configmap")
+		if err := updateKafkaLoggingConfig(cm.Data, logLevel); err != nil {
+			return fmt.Errorf("error updating kafka logging config: %w", err)
 		}
-
-		// Convert EventMesh log level to logback format
-		logbackLevel, err := convertToLogbackLogLevel(logLevel)
-		if err != nil {
-			return fmt.Errorf("error converting log level: %w", err)
-		}
-
-		// Update the root logger level using regex
-		// This matches: <root level="CURRENT_LEVEL"> and replaces the level value
-		// Regex explanation:
-		// - (<root\s+level=") captures the opening part with optional whitespace
-		// - [^"]+ matches the current level value (any non-quote characters)
-		// - (") captures the closing quote
-		rootLevelRegex := regexp.MustCompile(`(<root\s+level=")[^"]+(")`)
-		if !rootLevelRegex.MatchString(configXML) {
-			return fmt.Errorf("could not find <root level=\"...\"> pattern in logging configuration")
-		}
-
-		updatedXML := rootLevelRegex.ReplaceAllString(configXML, "${1}"+logbackLevel+"${2}")
-
-		// Verify the replacement worked
-		if updatedXML == configXML {
-			return fmt.Errorf("log level replacement failed - XML unchanged")
-		}
-
-		// Update the configmap
-		cm.Data["config.xml"] = updatedXML
 
 		return scheme.Scheme.Convert(cm, u, nil)
 	}
+}
+
+func updateKafkaLoggingConfig(data map[string]string, logLevel string) error {
+	configXML, exists := data["config.xml"]
+	if !exists {
+		return fmt.Errorf("config.xml not found in kafka-config-logging configmap")
+	}
+
+	logbackLevel := strings.ToUpper(logLevel)
+	updatedXML := configXML
+
+	rootLevelPattern := regexp.MustCompile(`(<root\s+[^>]*level=")[^"]+("(?:[^>]*>))`)
+	updatedXML = rootLevelPattern.ReplaceAllString(updatedXML, "${1}"+logbackLevel+"${2}")
+
+	loggerLevelPattern := regexp.MustCompile(`(<logger\s+[^>]*level=")[^"]+("(?:[^>]*>))`)
+	updatedXML = loggerLevelPattern.ReplaceAllString(updatedXML, "${1}"+logbackLevel+"${2}")
+
+	if updatedXML == configXML {
+		return fmt.Errorf("no logger or root level elements found in XML configuration")
+	}
+
+	data["config.xml"] = updatedXML
+	return nil
 }
 
 func updateZapConfigLevel(data map[string]string, level string) error {
@@ -158,12 +151,4 @@ func convertToZapLogLevel(logLevel string) (zapcore.Level, error) {
 		return zapcore.FatalLevel, nil
 	}
 	return zapcore.InvalidLevel, fmt.Errorf("unknown log level %s", logLevel)
-}
-
-func convertToLogbackLogLevel(logLevel string) (string, error) {
-	if slices.Contains(v1alpha1.LogLevels, strings.ToLower(logLevel)) {
-		return strings.ToUpper(logLevel), nil
-	}
-
-	return "", fmt.Errorf("unknown log level %s", logLevel)
 }
