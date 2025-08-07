@@ -52,7 +52,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: CONFIG_LOGGING_NAME
-          value: config-logging
+          value: config-operator-logging
         - name: METRICS_DOMAIN
           value: knative.dev/eventing
         - name: WEBHOOK_NAME
