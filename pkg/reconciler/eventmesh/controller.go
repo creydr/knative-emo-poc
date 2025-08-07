@@ -7,6 +7,7 @@ import (
 	mfc "github.com/manifestival/client-go-client"
 	mf "github.com/manifestival/manifestival"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 	eventinginformers "knative.dev/eventing/pkg/client/informers/externalversions"
 	eventingclient "knative.dev/eventing/pkg/client/injection/client"
@@ -71,17 +72,17 @@ func NewController(
 	return impl
 }
 
-func createInformerFunc[Lister any](ctx context.Context, di *dynamicinformer.DynamicInformer[Lister], resyncFunc func(interface{})) func() {
+func createInformerFunc[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister], resyncFunc func(interface{})) func() {
 	return func() {
-		if err := di.Reconcile(ctx, resyncFunc); err != nil {
+		if err := di.Reconcile(ctx, handleOnlyOnScaleToZeroOrOneItemsHandler[T, Lister](ctx, resyncFunc)); err != nil {
 			logging.FromContext(ctx).Errorf("Failed reconciling dynamic informer: %v", err)
 		}
 	}
 }
 
-func stopInformerFunc[Lister any](ctx context.Context, di *dynamicinformer.DynamicInformer[Lister]) func() {
+func stopInformerFunc[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister]) func() {
 	return func() {
-		logging.FromContext(ctx).Debug("IMC CRD is removed, stopping IMC informer")
+		logging.FromContext(ctx).Debug("CRD is removed, stopping informer")
 		di.Stop(ctx)
 	}
 }
@@ -95,5 +96,49 @@ func crdHandler(onAdd, onDelete func()) cache.ResourceEventHandler {
 		DeleteFunc: func(_ interface{}) {
 			onDelete()
 		},
+	}
+}
+
+// handleOnlyOnScaleToZeroOrOneItemsHandler only calls the resyncFunc, when the first resource gets created or
+// when the last resource gets deleted. This is helpful to trigger the resyncFunc only on meaningful updates for the
+// scaling (so not every time a resource (e.g. a Channel) gets created the whole EventMesh gets reconciled)
+func handleOnlyOnScaleToZeroOrOneItemsHandler[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, resyncFunc func(obj interface{})) func(informer dynamicinformer.Informer[Lister]) cache.ResourceEventHandler {
+	return func(informer dynamicinformer.Informer[Lister]) cache.ResourceEventHandler {
+		logger := logging.FromContext(ctx)
+		return cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				if informer.Informer() != nil && informer.Informer().HasSynced() {
+					objs, err := informer.Lister().List(labels.Everything())
+					if err != nil {
+						logger.Warn("Failed to list informer resources", zap.Error(err))
+						return
+					}
+
+					logger.Debugf("OnAdd with %d objects existing now", len(objs))
+
+					if len(objs) == 1 {
+						// we only care, when the first object comes
+						resyncFunc(obj)
+					}
+				}
+			},
+			UpdateFunc: func(old, new interface{}) {
+				// updates are ignored
+			},
+			DeleteFunc: func(obj interface{}) {
+				objs, err := informer.Lister().List(labels.Everything())
+				if err != nil {
+					logger.Warn("Failed to list informer resources", zap.Error(err))
+					return
+				}
+
+				logger.Debugf("OnDelete with %d objects existing now", len(objs))
+
+				if len(objs) == 0 {
+					// we only care, when the last one gets removed...
+					resyncFunc(obj)
+				}
+			},
+		}
 	}
 }

@@ -10,24 +10,22 @@ import (
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
-	eventinginformers "knative.dev/eventing/pkg/client/informers/externalversions"
-	eventingclient "knative.dev/eventing/pkg/client/injection/client"
 	"knative.dev/pkg/client/injection/apiextensions/client"
-	"knative.dev/pkg/controller"
 	"knative.dev/pkg/logging"
 )
 
-type DynamicInformer[Lister any] struct {
+type DynamicInformer[T any, Lister SimpleLister[T]] struct {
 	cancel      atomic.Pointer[context.CancelFunc]
 	lister      atomic.Pointer[Lister]
-	factoryFunc FactoryFunc[Lister]
+	factoryFunc FactoryFunc[T, Lister]
 	crdName     string
 	mu          sync.Mutex
 }
 
-type FactoryFunc[Lister any] func(ctx context.Context) (SharedInformerFactory, Informer[Lister])
+type FactoryFunc[T any, Lister SimpleLister[T]] func(ctx context.Context) (SharedInformerFactory, Informer[Lister])
 
 type Informer[Lister any] interface {
 	Informer() cache.SharedIndexInformer
@@ -40,8 +38,14 @@ type SharedInformerFactory interface {
 	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
 }
 
-func New[Lister any](crdName string, factoryFunc FactoryFunc[Lister]) *DynamicInformer[Lister] {
-	return &DynamicInformer[Lister]{
+type SimpleLister[T any] interface {
+	List(selector labels.Selector) (ret []*T, err error)
+}
+
+type EventHandlerFunc[T any, Lister SimpleLister[T]] func(informer Informer[Lister]) cache.ResourceEventHandler
+
+func New[T any, Lister SimpleLister[T]](crdName string, factoryFunc FactoryFunc[T, Lister]) *DynamicInformer[T, Lister] {
+	return &DynamicInformer[T, Lister]{
 		cancel:      atomic.Pointer[context.CancelFunc]{},
 		lister:      atomic.Pointer[Lister]{},
 		mu:          sync.Mutex{},
@@ -50,7 +54,7 @@ func New[Lister any](crdName string, factoryFunc FactoryFunc[Lister]) *DynamicIn
 	}
 }
 
-func (di *DynamicInformer[Lister]) Reconcile(ctx context.Context, resyncFunc func(interface{})) error {
+func (di *DynamicInformer[T, Lister]) Reconcile(ctx context.Context, eventHandlerFn func(informer Informer[Lister]) cache.ResourceEventHandler) error {
 	logger := logging.FromContext(ctx).With(zap.String("component", "DynamicInformer"), zap.String("resource", di.crdName))
 
 	di.mu.Lock()
@@ -62,10 +66,9 @@ func (di *DynamicInformer[Lister]) Reconcile(ctx context.Context, resyncFunc fun
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	eventinginformers.NewSharedInformerFactory(eventingclient.Get(ctx), controller.GetResyncPeriod(ctx))
 	factory, informer := di.factoryFunc(ctx)
 
-	informer.Informer().AddEventHandler(controller.HandleAll(resyncFunc)) //TODO: think about adding an event handler which only resyncs on add & update (because this is what we care about for scaling)
+	informer.Informer().AddEventHandler(eventHandlerFn(informer))
 
 	err := wait.PollUntilContextCancel(ctx, time.Second, false, func(ctx context.Context) (done bool, err error) {
 		logger.Debugf("Waiting for %s CRD to be installed", di.crdName)
@@ -95,7 +98,7 @@ func (di *DynamicInformer[Lister]) Reconcile(ctx context.Context, resyncFunc fun
 	return nil
 }
 
-func (di *DynamicInformer[Lister]) isCRDInstalled(ctx context.Context) (bool, error) {
+func (di *DynamicInformer[T, Lister]) isCRDInstalled(ctx context.Context) (bool, error) {
 	apiExtensionsClient := client.Get(ctx)
 
 	_, err := apiExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, di.crdName, metav1.GetOptions{})
@@ -105,7 +108,7 @@ func (di *DynamicInformer[Lister]) isCRDInstalled(ctx context.Context) (bool, er
 	return true, nil
 }
 
-func (di *DynamicInformer[Lister]) Stop(ctx context.Context) {
+func (di *DynamicInformer[T, Lister]) Stop(ctx context.Context) {
 	cancel := di.cancel.Load()
 	if cancel == nil {
 		logging.FromContext(ctx).Debug("Dynamic informer has not been started, nothing to stop")
@@ -117,7 +120,7 @@ func (di *DynamicInformer[Lister]) Stop(ctx context.Context) {
 	di.cancel.Store(nil) // Cancel is always set as last field since it's used as a "guard".
 }
 
-func (di *DynamicInformer[Lister]) Lister() *atomic.Pointer[Lister] {
+func (di *DynamicInformer[T, Lister]) Lister() *atomic.Pointer[Lister] {
 	di.mu.Lock()
 	defer di.mu.Unlock()
 
