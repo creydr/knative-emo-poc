@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 	"k8s.io/client-go/tools/cache"
 	eventinginformers "knative.dev/eventing/pkg/client/informers/externalversions"
+	eventingclient "knative.dev/eventing/pkg/client/injection/client"
 	messagingv1listers "knative.dev/eventing/pkg/client/listers/messaging/v1"
 	crdinformer "knative.dev/pkg/client/injection/apiextensions/informers/apiextensions/v1/customresourcedefinition"
 	deploymentinformer "knative.dev/pkg/client/injection/kube/informers/apps/v1/deployment"
@@ -34,8 +35,10 @@ func NewController(
 	crdInformer := crdinformer.Get(ctx)
 
 	imcCrdName := "inmemorychannels.messaging.knative.dev"
-	imcInformer := dynamicinformer.New(imcCrdName, func(factory eventinginformers.SharedInformerFactory) dynamicinformer.InformerInterface[messagingv1listers.InMemoryChannelLister] {
-		return factory.Messaging().V1().InMemoryChannels()
+	imcInformer := dynamicinformer.New(imcCrdName, func(ctx context.Context) (dynamicinformer.SharedInformerFactory, dynamicinformer.Informer[messagingv1listers.InMemoryChannelLister]) {
+		factory := eventinginformers.NewSharedInformerFactory(eventingclient.Get(ctx), controller.GetResyncPeriod(ctx))
+
+		return factory, factory.Messaging().V1().InMemoryChannels()
 	})
 
 	mfclient, err := mfc.NewClient(injection.GetConfig(ctx))

@@ -3,6 +3,7 @@ package dynamicinformer
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,27 +20,33 @@ import (
 )
 
 type DynamicInformer[Lister any] struct {
-	cancel       atomic.Pointer[context.CancelFunc]
-	lister       atomic.Pointer[Lister]
-	informerFunc InformerFunc[Lister]
-	crdName      string
-	mu           sync.Mutex
+	cancel      atomic.Pointer[context.CancelFunc]
+	lister      atomic.Pointer[Lister]
+	factoryFunc FactoryFunc[Lister]
+	crdName     string
+	mu          sync.Mutex
 }
 
-type InformerFunc[Lister any] func(factory eventinginformers.SharedInformerFactory) InformerInterface[Lister]
+type FactoryFunc[Lister any] func(ctx context.Context) (SharedInformerFactory, Informer[Lister])
 
-type InformerInterface[Lister any] interface {
+type Informer[Lister any] interface {
 	Informer() cache.SharedIndexInformer
 	Lister() Lister
 }
 
-func New[Lister any](crdName string, informerFunc InformerFunc[Lister]) *DynamicInformer[Lister] {
+type SharedInformerFactory interface {
+	Start(stopCh <-chan struct{})
+	Shutdown()
+	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
+}
+
+func New[Lister any](crdName string, factoryFunc FactoryFunc[Lister]) *DynamicInformer[Lister] {
 	return &DynamicInformer[Lister]{
-		cancel:       atomic.Pointer[context.CancelFunc]{},
-		lister:       atomic.Pointer[Lister]{},
-		mu:           sync.Mutex{},
-		informerFunc: informerFunc,
-		crdName:      crdName,
+		cancel:      atomic.Pointer[context.CancelFunc]{},
+		lister:      atomic.Pointer[Lister]{},
+		mu:          sync.Mutex{},
+		factoryFunc: factoryFunc,
+		crdName:     crdName,
 	}
 }
 
@@ -55,8 +62,9 @@ func (di *DynamicInformer[Lister]) Reconcile(ctx context.Context, resyncFunc fun
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	factory := eventinginformers.NewSharedInformerFactory(eventingclient.Get(ctx), controller.GetResyncPeriod(ctx))
-	informer := di.informerFunc(factory)
+	eventinginformers.NewSharedInformerFactory(eventingclient.Get(ctx), controller.GetResyncPeriod(ctx))
+	factory, informer := di.factoryFunc(ctx)
+
 	informer.Informer().AddEventHandler(controller.HandleAll(resyncFunc)) //TODO: think about adding an event handler which only resyncs on add & update (because this is what we care about for scaling)
 
 	err := wait.PollUntilContextCancel(ctx, time.Second, false, func(ctx context.Context) (done bool, err error) {
