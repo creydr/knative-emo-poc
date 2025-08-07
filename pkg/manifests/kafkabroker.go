@@ -35,6 +35,7 @@ func eventingKafkaBrokerCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error
 	manifests.AddTransformers(
 		transform.KafkaLogging(em.Spec.LogLevel),
 		transform.BootstrapServers(em.Spec.Kafka.BootstrapServers),
+		transform.NumberOfPartitions(em.Spec.Kafka.NumPartitions),
 	)
 
 	return &manifests, nil
