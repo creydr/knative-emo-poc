@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes/scheme"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
-	"knative.dev/pkg/logging"
 	"knative.dev/pkg/system"
 )
 
@@ -22,7 +21,7 @@ func EventingCoreLogging(logLevel string) mf.Transformer {
 			return nil
 		}
 
-		if u.GetNamespace() != system.Namespace() || u.GetName() != logging.ConfigMapName() {
+		if u.GetNamespace() != system.Namespace() || u.GetName() != "config-logging" {
 			return nil
 		}
 
