@@ -17,6 +17,9 @@ import (
 	"knative.dev/pkg/logging"
 )
 
+// DynamicInformer creates an informer dynamically. This allows for example to "use" its lister, before the CRD of this
+// type got created. This helps for example the operator to "use" the lister of the InMemoryChannel before the CRD got
+// applied.
 type DynamicInformer[T any, Lister SimpleLister[T]] struct {
 	cancel      atomic.Pointer[context.CancelFunc]
 	lister      atomic.Pointer[Lister]
@@ -54,7 +57,9 @@ func New[T any, Lister SimpleLister[T]](crdName string, factoryFunc FactoryFunc[
 	}
 }
 
-func (di *DynamicInformer[T, Lister]) Reconcile(ctx context.Context, eventHandlerFn func(informer Informer[Lister]) cache.ResourceEventHandler) error {
+// SetupInformerAndRegisterEventHandler setups the informer and registers an EventHandler for it.
+// The eventHandlerFunc gets the created informer passed, which allows for more dynamic event handling.
+func (di *DynamicInformer[T, Lister]) SetupInformerAndRegisterEventHandler(ctx context.Context, eventHandlerFn EventHandlerFunc[T, Lister]) error {
 	logger := logging.FromContext(ctx).With(zap.String("component", "DynamicInformer"), zap.String("resource", di.crdName))
 
 	di.mu.Lock()

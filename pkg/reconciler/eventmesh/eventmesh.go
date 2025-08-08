@@ -42,7 +42,7 @@ import (
 type Reconciler struct {
 	eventMeshLister  operatorv1alpha1listers.EventMeshLister
 	deploymentLister appsv1listers.DeploymentLister
-	dynamicImcLister *atomic.Pointer[messagingv1listers.InMemoryChannelLister]
+	dynamicIMCLister *atomic.Pointer[messagingv1listers.InMemoryChannelLister]
 	manifest         mf.Manifest
 }
 
@@ -152,7 +152,7 @@ func (r *Reconciler) hasForeignEventingInstalled(ctx context.Context, em *v1alph
 func (r *Reconciler) applyScaling(manifests *knmf.Manifests) error {
 	var scaleTarget int
 
-	imcLister := r.dynamicImcLister.Load()
+	imcLister := r.dynamicIMCLister.Load()
 	if imcLister == nil || *imcLister == nil {
 		// no imc lister registered so far (probably because no IMC CRD is installed yet)
 		scaleTarget = 0

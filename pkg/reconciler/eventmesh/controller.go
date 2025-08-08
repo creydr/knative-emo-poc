@@ -36,7 +36,7 @@ func NewController(
 	crdInformer := crdinformer.Get(ctx)
 
 	imcCrdName := "inmemorychannels.messaging.knative.dev"
-	imcInformer := dynamicinformer.New(imcCrdName, func(ctx context.Context) (dynamicinformer.SharedInformerFactory, dynamicinformer.Informer[messagingv1listers.InMemoryChannelLister]) {
+	dynamicIMCInformer := dynamicinformer.New(imcCrdName, func(ctx context.Context) (dynamicinformer.SharedInformerFactory, dynamicinformer.Informer[messagingv1listers.InMemoryChannelLister]) {
 		factory := eventinginformers.NewSharedInformerFactory(eventingclient.Get(ctx), controller.GetResyncPeriod(ctx))
 
 		return factory, factory.Messaging().V1().InMemoryChannels()
@@ -53,7 +53,7 @@ func NewController(
 		eventMeshLister:  eventMeshInformer.Lister(),
 		deploymentLister: deploymentInformer.Lister(),
 		manifest:         manifest,
-		dynamicImcLister: imcInformer.Lister(),
+		dynamicIMCLister: dynamicIMCInformer.Lister(),
 	}
 
 	impl := eventmeshreconciler.NewImpl(ctx, r)
@@ -66,28 +66,28 @@ func NewController(
 
 	crdInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: controller.FilterWithName(imcCrdName),
-		Handler:    crdHandler(createInformerFunc(ctx, imcInformer, globalResync), stopInformerFunc(ctx, imcInformer)),
+		Handler:    newCRDEventHandler(startDynamicInformer(ctx, dynamicIMCInformer, globalResync), stopDynamicInformer(ctx, dynamicIMCInformer)),
 	})
 
 	return impl
 }
 
-func createInformerFunc[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister], resyncFunc func(interface{})) func() {
+func startDynamicInformer[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister], resyncFunc func(interface{})) func() {
 	return func() {
-		if err := di.Reconcile(ctx, handleOnlyOnScaleToZeroOrOneItemsHandler[T, Lister](ctx, resyncFunc)); err != nil {
+		if err := di.SetupInformerAndRegisterEventHandler(ctx, handleOnlyOnScaleToZeroOrOneItemsHandler[T, Lister](ctx, resyncFunc)); err != nil {
 			logging.FromContext(ctx).Errorf("Failed reconciling dynamic informer: %v", err)
 		}
 	}
 }
 
-func stopInformerFunc[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister]) func() {
+func stopDynamicInformer[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister]) func() {
 	return func() {
 		logging.FromContext(ctx).Debug("CRD is removed, stopping informer")
 		di.Stop(ctx)
 	}
 }
 
-func crdHandler(onAdd, onDelete func()) cache.ResourceEventHandler {
+func newCRDEventHandler(onAdd, onDelete func()) cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			onAdd()
