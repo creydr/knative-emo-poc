@@ -33,6 +33,12 @@ func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
 	}
 	manifests.Append(imcManifests)
 
+	mtBrokerManifests, err := eventingMTBrokerManifests(em)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load eventing MT channel Broker manifests: %w", err)
+	}
+	manifests.Append(mtBrokerManifests)
+
 	// ...
 
 	return manifests, nil
@@ -75,13 +81,27 @@ func eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
-	tlsManifests, err := loadManifests("eventing-latest", "in-memory-channel.yaml")
+	imcManifests, err := loadManifests("eventing-latest", "in-memory-channel.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing IMC manifests: %w", err)
 	}
 
 	// TODO: only add when enabled...
-	manifests.AddToApply(tlsManifests)
+	manifests.AddToApply(imcManifests)
+
+	return &manifests, nil
+}
+
+func eventingMTBrokerManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+	manifests := Manifests{}
+
+	mtBroker, err := loadManifests("eventing-latest", "mt-channel-broker.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load eventing MT channel broker manifests: %w", err)
+	}
+
+	// TODO: only add when enabled...
+	manifests.AddToApply(mtBroker)
 
 	return &manifests, nil
 }

@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
+	eventingv1listers "knative.dev/eventing/pkg/client/listers/eventing/v1"
 	messagingv1listers "knative.dev/eventing/pkg/client/listers/messaging/v1"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	eventmeshreconciler "knative.dev/eventmesh-operator/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
@@ -40,10 +41,11 @@ import (
 )
 
 type Reconciler struct {
-	eventMeshLister  operatorv1alpha1listers.EventMeshLister
-	deploymentLister appsv1listers.DeploymentLister
-	dynamicIMCLister *atomic.Pointer[messagingv1listers.InMemoryChannelLister]
-	manifest         mf.Manifest
+	eventMeshLister       operatorv1alpha1listers.EventMeshLister
+	deploymentLister      appsv1listers.DeploymentLister
+	dynamicIMCLister      *atomic.Pointer[messagingv1listers.InMemoryChannelLister]
+	dynamicMTBrokerLister *atomic.Pointer[eventingv1listers.BrokerLister]
+	manifest              mf.Manifest
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
@@ -79,7 +81,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 	}
 	manifests.Append(ekbManifests)
 
-	if err := r.applyScaling(&manifests); err != nil {
+	if err := r.applyScaling(ctx, &manifests); err != nil {
 		return fmt.Errorf("failed to apply Scaling: %w", err)
 	}
 
@@ -149,36 +151,80 @@ func (r *Reconciler) hasForeignEventingInstalled(ctx context.Context, em *v1alph
 	return true, nil
 }
 
-func (r *Reconciler) applyScaling(manifests *knmf.Manifests) error {
-	var scaleTarget int
+func (r *Reconciler) applyScaling(ctx context.Context, manifests *knmf.Manifests) error {
+	if err := r.applyScalingForIMC(ctx, manifests); err != nil {
+		return fmt.Errorf("failed to apply Scaling for IMC: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Reconciler) applyScalingForIMC(ctx context.Context, manifests *knmf.Manifests) error {
+	logger := logging.FromContext(ctx).With("scaler", "imc")
+
+	var imcScaleTarget, brokerScaleTarget int
 
 	imcLister := r.dynamicIMCLister.Load()
-	if imcLister == nil || *imcLister == nil {
-		// no imc lister registered so far (probably because no IMC CRD is installed yet)
-		scaleTarget = 0
+	mtBrokerLister := r.dynamicMTBrokerLister.Load()
+
+	if imcLister == nil || *imcLister == nil || mtBrokerLister == nil || *mtBrokerLister == nil {
+		// no imc or broker lister registered so far (probably because IMC/Broker CRD is installed yet)
+		imcScaleTarget = 0
+		brokerScaleTarget = 0
 	} else {
 		imcs, err := (*imcLister).List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("failed to list all InMemoryChannels: %w", err)
 		}
 
-		if len(imcs) == 0 {
-			scaleTarget = 0
+		mtBrokers, err := (*mtBrokerLister).List(labels.Everything())
+		if err != nil {
+			return fmt.Errorf("failed to list all MT Brokers: %w", err)
+		}
+
+		logger.Debugf("Found %d in-memory channels and %d mt brokers", len(imcs), len(mtBrokers))
+
+		if len(imcs) == 0 && len(mtBrokers) == 0 {
+			imcScaleTarget = 0
+			brokerScaleTarget = 0
+		} else if len(imcs) > 0 && len(mtBrokers) == 0 {
+			imcScaleTarget = 1
+			brokerScaleTarget = 0
 		} else {
-			scaleTarget = 1
+			imcScaleTarget = 1
+			brokerScaleTarget = 1
 		}
 	}
+
+	logger.Debugf("Scaling in-memory channel components to %d and mt broker components to %d", imcScaleTarget, brokerScaleTarget)
 
 	manifests.AddTransformers(
 		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
 			"imc-dispatcher",
 			"knative-eventing",
-			scaleTarget))
+			imcScaleTarget))
 	manifests.AddTransformers(
 		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
 			"imc-controller",
 			"knative-eventing",
-			scaleTarget))
+			imcScaleTarget))
+
+	// TODO: check if this fights with the HorizontalPodAutoscalers broker-ingress-hpa and broker-filter-hpa
+	manifests.AddTransformers(
+		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+			"mt-broker-filter",
+			"knative-eventing",
+			brokerScaleTarget))
+	manifests.AddTransformers(
+		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+			"mt-broker-ingress",
+			"knative-eventing",
+			brokerScaleTarget))
+	manifests.AddTransformers(
+		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+			"mt-broker-controller",
+			"knative-eventing",
+			brokerScaleTarget))
 
 	return nil
 }
