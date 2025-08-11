@@ -45,7 +45,7 @@ type SimpleLister[T any] interface {
 	List(selector labels.Selector) (ret []*T, err error)
 }
 
-type EventHandlerFunc[T any, Lister SimpleLister[T]] func(informer Informer[Lister]) cache.ResourceEventHandler
+type EventHandlerFunc[T any, Lister SimpleLister[T]] func(ctx context.Context, informer Informer[Lister]) cache.ResourceEventHandler
 
 func New[T any, Lister SimpleLister[T]](crdName string, factoryFunc FactoryFunc[T, Lister]) *DynamicInformer[T, Lister] {
 	return &DynamicInformer[T, Lister]{
@@ -73,7 +73,7 @@ func (di *DynamicInformer[T, Lister]) SetupInformerAndRegisterEventHandler(ctx c
 	ctx, cancel := context.WithCancel(ctx)
 	factory, informer := di.factoryFunc(ctx)
 
-	informer.Informer().AddEventHandler(eventHandlerFn(informer))
+	informer.Informer().AddEventHandler(eventHandlerFn(ctx, informer))
 
 	err := wait.PollUntilContextCancel(ctx, time.Second, false, func(ctx context.Context) (done bool, err error) {
 		logger.Debugf("Waiting for %s CRD to be installed", di.crdName)

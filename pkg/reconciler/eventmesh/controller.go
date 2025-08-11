@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
-	"knative.dev/eventing/pkg/apis/eventing"
 	v1 "knative.dev/eventing/pkg/apis/eventing/v1"
+	messagingv1 "knative.dev/eventing/pkg/apis/messaging/v1"
 	eventinginformers "knative.dev/eventing/pkg/client/informers/externalversions"
 	eventingclient "knative.dev/eventing/pkg/client/injection/client"
 	eventingv1listers "knative.dev/eventing/pkg/client/listers/eventing/v1"
@@ -46,7 +46,7 @@ func NewController(
 	})
 
 	brokerCrdName := "brokers.eventing.knative.dev"
-	dynamicMTBrokerInformer := dynamicinformer.New(brokerCrdName, func(ctx context.Context) (dynamicinformer.SharedInformerFactory, dynamicinformer.Informer[eventingv1listers.BrokerLister]) {
+	dynamicBrokerInformer := dynamicinformer.New(brokerCrdName, func(ctx context.Context) (dynamicinformer.SharedInformerFactory, dynamicinformer.Informer[eventingv1listers.BrokerLister]) {
 		factory := eventinginformers.NewSharedInformerFactory(eventingclient.Get(ctx), controller.GetResyncPeriod(ctx))
 
 		return factory, factory.Eventing().V1().Brokers()
@@ -60,11 +60,11 @@ func NewController(
 	manifest, _ := mf.ManifestFrom(mf.Slice{}, mf.UseClient(mfclient), mf.UseLogger(mflogger))
 
 	r := &Reconciler{
-		eventMeshLister:       eventMeshInformer.Lister(),
-		deploymentLister:      deploymentInformer.Lister(),
-		manifest:              manifest,
-		dynamicIMCLister:      dynamicIMCInformer.Lister(),
-		dynamicMTBrokerLister: dynamicMTBrokerInformer.Lister(),
+		eventMeshLister:     eventMeshInformer.Lister(),
+		deploymentLister:    deploymentInformer.Lister(),
+		manifest:            manifest,
+		dynamicIMCLister:    dynamicIMCInformer.Lister(),
+		dynamicBrokerLister: dynamicBrokerInformer.Lister(),
 	}
 
 	impl := eventmeshreconciler.NewImpl(ctx, r)
@@ -77,26 +77,26 @@ func NewController(
 
 	crdInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: controller.FilterWithName(imcCrdName),
-		Handler:    newCRDEventHandler(startDynamicInformer(ctx, dynamicIMCInformer, globalResync, nil), stopDynamicInformer(ctx, dynamicIMCInformer)),
+		Handler: newCRDEventHandler(
+			startDynamicInformer(ctx, dynamicIMCInformer,
+				handleOnlyOnScaleToZeroOrOneItemsHandler[messagingv1.InMemoryChannel, messagingv1listers.InMemoryChannelLister](globalResync)),
+			stopDynamicInformer(ctx, dynamicIMCInformer)),
 	})
 
 	crdInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: controller.FilterWithName(brokerCrdName),
-		Handler:    newCRDEventHandler(startDynamicInformer(ctx, dynamicMTBrokerInformer, globalResync, brokerClassFilter(eventing.MTChannelBrokerClassValue)), stopDynamicInformer(ctx, dynamicMTBrokerInformer)),
+		Handler: newCRDEventHandler(
+			startDynamicInformer(ctx, dynamicBrokerInformer,
+				handleOnlyOnScaleToZeroOrOneItemsForBrokerClassHandler[v1.Broker, eventingv1listers.BrokerLister](globalResync)),
+			stopDynamicInformer(ctx, dynamicBrokerInformer)),
 	})
 
 	return impl
 }
 
-func brokerClassFilter(brokerClass string) func(*v1.Broker) bool {
-	return func(broker *v1.Broker) bool {
-		return broker.Annotations[v1.BrokerClassAnnotationKey] == brokerClass
-	}
-}
-
-func startDynamicInformer[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister], resyncFunc func(interface{}), filterFunc func(obj *T) bool) func() {
+func startDynamicInformer[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, di *dynamicinformer.DynamicInformer[T, Lister], eventHandlerFn dynamicinformer.EventHandlerFunc[T, Lister]) func() {
 	return func() {
-		if err := di.SetupInformerAndRegisterEventHandler(ctx, handleOnlyOnScaleToZeroOrOneItemsHandler[T, Lister](ctx, resyncFunc, filterFunc)); err != nil {
+		if err := di.SetupInformerAndRegisterEventHandler(ctx, eventHandlerFn); err != nil {
 			logging.FromContext(ctx).Errorf("Failed reconciling dynamic informer: %v", err)
 		}
 	}
@@ -124,12 +124,9 @@ func newCRDEventHandler(onAdd, onDelete func()) cache.ResourceEventHandler {
 // handleOnlyOnScaleToZeroOrOneItemsHandler only calls the resyncFunc, when the first resource gets created or
 // when the last resource gets deleted. This is helpful to trigger the resyncFunc only on meaningful updates for the
 // scaling (so not every time a resource (e.g. a Channel) gets created the whole EventMesh gets reconciled).
-// It also accepts an optional filter, which lets filter the objects. This can be helpful for example, when a resource
-// is handled by different controllers which need to scale up and down (for example the brokers where we have the kafka
-// or mt-channel broker controllers)
 // Simply said, it is an advanced FilteringResourceEventHandler.
-func handleOnlyOnScaleToZeroOrOneItemsHandler[T any, Lister dynamicinformer.SimpleLister[T]](ctx context.Context, resyncFunc func(obj interface{}), filterFunc func(*T) bool) dynamicinformer.EventHandlerFunc[T, Lister] {
-	return func(informer dynamicinformer.Informer[Lister]) cache.ResourceEventHandler {
+func handleOnlyOnScaleToZeroOrOneItemsHandler[T any, Lister dynamicinformer.SimpleLister[T]](resyncFunc func(obj interface{})) dynamicinformer.EventHandlerFunc[T, Lister] {
+	return func(ctx context.Context, informer dynamicinformer.Informer[Lister]) cache.ResourceEventHandler {
 		logger := logging.FromContext(ctx)
 		return cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -140,19 +137,9 @@ func handleOnlyOnScaleToZeroOrOneItemsHandler[T any, Lister dynamicinformer.Simp
 						return
 					}
 
-					filteredObjs := objs
-					if filterFunc != nil {
-						filteredObjs = make([]*T, 0, len(objs))
-						for _, obj := range objs {
-							if filterFunc(obj) {
-								filteredObjs = append(filteredObjs, obj)
-							}
-						}
-					}
+					logger.Debugf("OnAdd with %d objects existing now", len(objs))
 
-					logger.Debugf("OnAdd with %d objects existing now (%d in total before filtering)", len(filteredObjs), len(objs))
-
-					if len(filteredObjs) == 1 {
+					if len(objs) == 1 {
 						// we only care, when the first object comes
 						resyncFunc(obj)
 					}
@@ -168,21 +155,78 @@ func handleOnlyOnScaleToZeroOrOneItemsHandler[T any, Lister dynamicinformer.Simp
 					return
 				}
 
-				filteredObjs := objs
-				if filterFunc != nil {
-					filteredObjs = make([]*T, 0, len(objs))
-					for _, obj := range objs {
-						if filterFunc(obj) {
-							filteredObjs = append(filteredObjs, obj)
-						}
-					}
-				}
+				logger.Debugf("OnDelete with %d objects existing now", len(objs))
 
-				logger.Debugf("OnDelete with %d objects existing now (%d in total before filtering)", len(filteredObjs), len(objs))
-
-				if len(filteredObjs) == 0 {
+				if len(objs) == 0 {
 					// we only care, when the last one gets removed...
 					resyncFunc(obj)
+				}
+			},
+		}
+	}
+}
+
+// handleOnlyOnScaleToZeroOrOneItemsForBrokerClassHandler is the same as handleOnlyOnScaleToZeroOrOneItemsHandler
+// but only triggers on meaningful changes for brokers taking their broker classes into account too
+func handleOnlyOnScaleToZeroOrOneItemsForBrokerClassHandler[T v1.Broker, Lister dynamicinformer.SimpleLister[v1.Broker]](resyncFunc func(obj interface{})) dynamicinformer.EventHandlerFunc[v1.Broker, Lister] {
+	return func(ctx context.Context, informer dynamicinformer.Informer[Lister]) cache.ResourceEventHandler {
+		logger := logging.FromContext(ctx)
+		return cache.ResourceEventHandlerFuncs{
+			AddFunc: func(newObject interface{}) {
+				newBroker, ok := newObject.(*v1.Broker)
+				if !ok {
+					return
+				}
+
+				if informer.Informer() != nil && informer.Informer().HasSynced() {
+					objs, err := informer.Lister().List(labels.Everything())
+					if err != nil {
+						logger.Warn("Failed to list informer resources", zap.Error(err))
+						return
+					}
+
+					// create a map how many items per brokerclass exist
+					itemPerBrokerclass := make(map[string]int)
+					for _, obj := range objs {
+						itemPerBrokerclass[obj.Annotations[v1.BrokerClassAnnotationKey]] += 1
+					}
+
+					createdBrokersBrokerClass := newBroker.Annotations[v1.BrokerClassAnnotationKey]
+					logger.Debugf("OnAdd with %d objects existing for Brokerclass %s now", itemPerBrokerclass[createdBrokersBrokerClass], createdBrokersBrokerClass)
+
+					if itemPerBrokerclass[createdBrokersBrokerClass] == 1 {
+						// we only care, when the first object comes
+						resyncFunc(newObject)
+					}
+				}
+			},
+			UpdateFunc: func(old, new interface{}) {
+				// updates are ignored
+			},
+			DeleteFunc: func(deletedObject interface{}) {
+				deletedBroker, ok := deletedObject.(*v1.Broker)
+				if !ok {
+					return
+				}
+
+				objs, err := informer.Lister().List(labels.Everything())
+				if err != nil {
+					logger.Warn("Failed to list informer resources", zap.Error(err))
+					return
+				}
+
+				// create a map how many items per brokerclass exist
+				itemPerBrokerclass := make(map[string]int)
+				for _, obj := range objs {
+					itemPerBrokerclass[obj.Annotations[v1.BrokerClassAnnotationKey]] += 1
+				}
+
+				deletedBrokersBrokerClass := deletedBroker.Annotations[v1.BrokerClassAnnotationKey]
+				logger.Debugf("OnDelete with %d objects existing for Brokerclass %s now", itemPerBrokerclass[deletedBrokersBrokerClass], deletedBrokersBrokerClass)
+
+				if itemPerBrokerclass[deletedBrokersBrokerClass] == 0 {
+					// we only care, when the last one gets removed...
+					resyncFunc(deletedObject)
 				}
 			},
 		}
