@@ -37,6 +37,7 @@ func eventingKafkaBrokerCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error
 		transform.BootstrapServers(em.Spec.Kafka.BootstrapServers),
 		transform.NumberOfPartitions(em.Spec.Kafka.NumPartitions),
 		transform.ReplicationFactor(em.Spec.Kafka.ReplicationFactor),
+		transform.KafkaTopicOption(em.Spec.Kafka.TopicConfigOptions),
 	)
 
 	return &manifests, nil

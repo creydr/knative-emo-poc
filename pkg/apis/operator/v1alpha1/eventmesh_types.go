@@ -56,9 +56,10 @@ type EventMeshSpecKafka struct {
 	BootstrapServers []string `json:"bootstrapServers,omitempty"`
 
 	// +optional
-	AuthSecretRef     *corev1.SecretReference `json:"authSecretRef,omitempty"`
-	NumPartitions     int32                   `json:"numPartitions,omitempty"`
-	ReplicationFactor int32                   `json:"replicationFactor,omitempty"`
+	AuthSecretRef      *corev1.SecretReference `json:"authSecretRef,omitempty"`
+	NumPartitions      int32                   `json:"numPartitions,omitempty"`
+	ReplicationFactor  int32                   `json:"replicationFactor,omitempty"`
+	TopicConfigOptions map[string]string       `json:"topicConfigOptions,omitempty"`
 }
 
 type EventMeshStatus struct {
