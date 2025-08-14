@@ -51,7 +51,9 @@ func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	}
 	manifests.AddToApply(coreManifests)
 
-	manifests.AddTransformers(transform.EventingCoreLogging(em.Spec.LogLevel))
+	manifests.AddTransformers(
+		transform.EventingCoreLogging(em.Spec.LogLevel),
+		transform.FeatureFlags(em.Spec.Features))
 
 	return &manifests, nil
 }

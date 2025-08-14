@@ -30,7 +30,7 @@ func ConfigMap(name, namespace, key, value string) mf.Transformer {
 	}
 }
 
-func ConfigMapMultipleValues(name, namespace string, keyValues map[string]string) mf.Transformer {
+func ConfigMapMultipleValues(name, namespace string, keyValues map[string]string, merge bool) mf.Transformer {
 	return func(u *unstructured.Unstructured) error {
 		if u.GetKind() != "ConfigMap" {
 			return nil
@@ -45,8 +45,12 @@ func ConfigMapMultipleValues(name, namespace string, keyValues map[string]string
 			return fmt.Errorf("error converting unstructured to configmap: %w", err)
 		}
 
-		for k, v := range keyValues {
-			cm.Data[k] = v
+		if merge {
+			for k, v := range keyValues {
+				cm.Data[k] = v
+			}
+		} else {
+			cm.Data = keyValues
 		}
 
 		return scheme.Scheme.Convert(cm, u, nil)

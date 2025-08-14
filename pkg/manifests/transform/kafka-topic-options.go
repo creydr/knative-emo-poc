@@ -18,5 +18,6 @@ func KafkaTopicOption(options map[string]string) mf.Transformer {
 	return ConfigMapMultipleValues(
 		"kafka-broker-config",
 		system.Namespace(),
-		optionsWithPrefixedKeys)
+		optionsWithPrefixedKeys,
+		true)
 }
