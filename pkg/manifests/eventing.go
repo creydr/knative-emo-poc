@@ -2,10 +2,8 @@ package manifests
 
 import (
 	"fmt"
-	"strings"
 
 	mf "github.com/manifestival/manifestival"
-	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	"knative.dev/eventmesh-operator/pkg/manifests/transform"
 )
@@ -58,26 +56,6 @@ func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return &manifests, nil
 }
 
-func eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
-	manifests := Manifests{}
-
-	tlsManifests, err := loadManifests("eventing-latest", "eventing-tls-networking.yaml")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load eventing TLS manifests: %w", err)
-	}
-
-	if strings.EqualFold(em.Spec.TransportEncryption, string(feature.Strict)) ||
-		strings.EqualFold(em.Spec.TransportEncryption, string(feature.Permissive)) {
-		manifests.AddToApply(tlsManifests)
-
-		// TODO: append feature configmap transformer
-	} else {
-		manifests.AddToDelete(tlsManifests)
-	}
-
-	return &manifests, nil
-}
-
 func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
@@ -86,7 +64,7 @@ func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 		return nil, fmt.Errorf("failed to load eventing IMC manifests: %w", err)
 	}
 
-	// TODO: only add when enabled...
+	// we install the manifests by default, but scale the deployments down when no IMC exists
 	manifests.AddToApply(imcManifests)
 
 	return &manifests, nil
@@ -100,8 +78,31 @@ func eventingMTBrokerManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 		return nil, fmt.Errorf("failed to load eventing MT channel broker manifests: %w", err)
 	}
 
-	// TODO: only add when enabled...
+	// we install the manifests by default, but scale the deployments down when no MTCB broker exists
 	manifests.AddToApply(mtBroker)
+
+	return &manifests, nil
+}
+
+func eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+	manifests := Manifests{}
+
+	tlsManifests, err := loadManifests("eventing-latest", "eventing-tls-networking.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load eventing TLS manifests: %w", err)
+	}
+
+	features, err := em.Spec.GetFeatureFlags()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load feature flags: %w", err)
+	}
+
+	if !features.IsDisabledTransportEncryption() {
+		// here we need certmanager too
+		manifests.AddToApply(tlsManifests)
+	} else {
+		manifests.AddToDelete(tlsManifests)
+	}
 
 	return &manifests, nil
 }

@@ -91,6 +91,13 @@ func (in *EventMeshList) DeepCopyObject() runtime.Object {
 func (in *EventMeshSpec) DeepCopyInto(out *EventMeshSpec) {
 	*out = *in
 	in.Kafka.DeepCopyInto(&out.Kafka)
+	if in.Features != nil {
+		in, out := &in.Features, &out.Features
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	return
 }
 
@@ -114,8 +121,15 @@ func (in *EventMeshSpecKafka) DeepCopyInto(out *EventMeshSpecKafka) {
 	}
 	if in.AuthSecretRef != nil {
 		in, out := &in.AuthSecretRef, &out.AuthSecretRef
-		*out = new(v1.SecretReference)
+		*out = new(v1.LocalObjectReference)
 		**out = **in
+	}
+	if in.TopicConfigOptions != nil {
+		in, out := &in.TopicConfigOptions, &out.TopicConfigOptions
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
 	}
 	return
 }

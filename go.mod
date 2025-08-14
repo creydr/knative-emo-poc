@@ -4,6 +4,7 @@ go 1.24.5
 
 require (
 	github.com/go-logr/zapr v1.3.0
+	github.com/google/go-cmp v0.7.0
 	github.com/manifestival/client-go-client v0.6.0
 	github.com/manifestival/manifestival v0.7.3-0.20240423164312-c22dbe524c64
 	go.uber.org/zap v1.27.0
@@ -42,7 +43,6 @@ require (
 	github.com/gobuffalo/flect v1.0.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect

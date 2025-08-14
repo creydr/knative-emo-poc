@@ -38,6 +38,13 @@ spec:
             spec:
               type: object
               properties:
+                defaultBroker:
+                  type: string
+                defaultChannel:
+                  type: string
+                features:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
                 kafka:
                   type: object
                   properties:
@@ -45,10 +52,7 @@ spec:
                       type: object
                       properties:
                         name:
-                          description: name is unique within a namespace to reference a secret resource.
-                          type: string
-                        namespace:
-                          description: namespace defines the space within which the secret name must be unique.
+                          description: 'Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
                           type: string
                     bootstrapServers:
                       type: array
@@ -60,9 +64,10 @@ spec:
                     replicationFactor:
                       type: integer
                       format: int32
+                    topicConfigOptions:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
                 logLevel:
-                  type: string
-                transportEncryption:
                   type: string
             status:
               type: object

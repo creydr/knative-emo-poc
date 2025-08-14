@@ -5,6 +5,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/kmeta"
@@ -17,6 +18,12 @@ const (
 	LogLevelWarn  = "warn"
 	LogLevelError = "error"
 	LogLevelFatal = "fatal"
+
+	BrokerClassKafka          = "Kafka"
+	BrokerClassMTChannelBased = "MTChannelBasedBroker"
+
+	ChannelImplementationKafka = "KafkaChannel"
+	ChannelImplementationIMC   = "InMemoryChannel"
 )
 
 var (
@@ -27,6 +34,16 @@ var (
 		LogLevelWarn,
 		LogLevelError,
 		LogLevelFatal,
+	}
+
+	BrokerClasses = []string{
+		BrokerClassKafka,
+		BrokerClassMTChannelBased,
+	}
+
+	ChannelImplementations = []string{
+		ChannelImplementationKafka,
+		ChannelImplementationIMC,
 	}
 )
 
@@ -47,19 +64,35 @@ type EventMesh struct {
 }
 
 type EventMeshSpec struct {
-	Kafka               EventMeshSpecKafka `json:"kafka,omitempty"`
-	LogLevel            string             `json:"logLevel,omitempty"`
-	TransportEncryption string             `json:"transportEncryption,omitempty"`
+	Kafka EventMeshSpecKafka `json:"kafka,omitempty"`
+
+	// +optional
+	LogLevel string `json:"logLevel,omitempty"`
+
+	// +optional
+	DefaultBroker string `json:"defaultBroker,omitempty"`
+
+	// +optional
+	DefaultChannel string `json:"defaultChannel,omitempty"`
+
+	// +optional
+	Features map[string]string `json:"features,omitempty"`
 }
 
 type EventMeshSpecKafka struct {
 	BootstrapServers []string `json:"bootstrapServers,omitempty"`
 
 	// +optional
-	AuthSecretRef      *corev1.SecretReference `json:"authSecretRef,omitempty"`
-	NumPartitions      int32                   `json:"numPartitions,omitempty"`
-	ReplicationFactor  int32                   `json:"replicationFactor,omitempty"`
-	TopicConfigOptions map[string]string       `json:"topicConfigOptions,omitempty"`
+	AuthSecretRef *corev1.LocalObjectReference `json:"authSecretRef,omitempty"`
+
+	// +optional
+	NumPartitions int32 `json:"numPartitions,omitempty"`
+
+	// +optional
+	ReplicationFactor int32 `json:"replicationFactor,omitempty"`
+
+	// +optional
+	TopicConfigOptions map[string]string `json:"topicConfigOptions,omitempty"`
 }
 
 type EventMeshStatus struct {
@@ -109,4 +142,8 @@ func (em *EventMesh) GetUntypedSpec() interface{} {
 // GetStatus retrieves the status of the EventMesh. Implements the KRShaped interface.
 func (em *EventMesh) GetStatus() *duckv1.Status {
 	return &em.Status.Status
+}
+
+func (ems *EventMeshSpec) GetFeatureFlags() (feature.Flags, error) {
+	return feature.NewFlagsConfigFromMap(ems.Features)
 }
