@@ -88,7 +88,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 	// TODO: fix (somehow the GVK of the em are empty)
 	emCopy := em.DeepCopy()
 	emCopy.SetGroupVersionKind(v1alpha1.SchemeGroupVersion.WithKind("EventMesh"))
-	manifests.AddTransformers(mf.InjectOwner(emCopy))
+	manifests.AddTransformers(transform.InjectOwner(emCopy)) // use our own InjectOwners to keep the namespace clean
 
 	// Apply patches at the end when all manifests are loaded
 	logger.Debug("Applying patches to manifests")
