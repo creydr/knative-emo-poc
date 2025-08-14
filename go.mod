@@ -5,8 +5,8 @@ go 1.24.5
 require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/google/go-cmp v0.7.0
-	github.com/manifestival/client-go-client v0.6.0
-	github.com/manifestival/manifestival v0.7.3-0.20240423164312-c22dbe524c64
+	github.com/manifestival/client-go-client v0.6.1-0.20240501171814-824fb1db1ad3
+	github.com/manifestival/manifestival v0.7.3-0.20250813125316-0dc94ac5594b
 	go.uber.org/zap v1.27.0
 	k8s.io/api v0.33.1
 	k8s.io/apiextensions-apiserver v0.33.1
@@ -114,11 +114,4 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 	sigs.k8s.io/yaml v1.5.0 // indirect
-)
-
-replace (
-	// fix dependency issue between manifestival and client-go-client
-	github.com/manifestival/client-go-client => github.com/manifestival/client-go-client v0.6.1-0.20240501171814-824fb1db1ad3
-	// Replace with fork which supports sorting https://github.com/creydr/manifestival/tree/add-sorting
-	github.com/manifestival/manifestival => github.com/creydr/manifestival v0.0.0-20250806154118-6bb74741b06a
 )

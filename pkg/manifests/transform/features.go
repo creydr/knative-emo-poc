@@ -6,6 +6,7 @@ import (
 )
 
 func FeatureFlags(features map[string]string) mf.Transformer {
+	// TODO: we only set the eventing features, but EKB has features too (config-kafka-features)
 	return ConfigMapMultipleValues(
 		"config-features",
 		system.Namespace(),

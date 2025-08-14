@@ -17,6 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Added
 
+- Introduced `Sort` to the `Manifestival` interface to reorder resources in a manifest. `ByKindPriority()` helps for Kubernetes dependency-aware sorting [#104](https://github.com/manifestival/manifestival/issues/104)
+
 ### Removed
 
 
