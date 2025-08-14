@@ -52,6 +52,8 @@ func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 
 	manifests.AddTransformers(
 		transform.EventingCoreLogging(em.Spec.LogLevel),
+		transform.DefaultChannelImplementation(em.Spec.DefaultChannel),
+		transform.DefaultBrokerClass(em.Spec.DefaultBroker, em.Spec.DefaultChannel),
 		transform.FeatureFlags(em.Spec.Features))
 
 	return &manifests, nil
