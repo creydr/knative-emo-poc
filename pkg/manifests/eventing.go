@@ -18,13 +18,6 @@ func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
 	}
 	manifests.Append(coreManifests)
 
-	// depending on EventMesh config, load additional manifests & Transformers (e.g. istio, TLS, ...)
-	tlsManifests, err := eventingTLSManifests(em)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load eventing tls manifests: %w", err)
-	}
-	manifests.Append(tlsManifests)
-
 	imcManifests, err := eventingIMCManifests(em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing IMC manifests: %w", err)
@@ -36,6 +29,12 @@ func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
 		return nil, fmt.Errorf("failed to load eventing MT channel Broker manifests: %w", err)
 	}
 	manifests.Append(mtBrokerManifests)
+
+	tlsManifests, err := eventingTLSManifests(em)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load eventing tls manifests: %w", err)
+	}
+	manifests.Append(tlsManifests)
 
 	// ...
 

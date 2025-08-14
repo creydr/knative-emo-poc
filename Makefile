@@ -16,3 +16,7 @@ setup-kind: delete-kind-cluster
 delete-kind-cluster:
 	kind delete cluster
 .PHONY: delete-kind-cluster
+
+install-cert-manager:
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.18.2/cert-manager.yaml
+.PHONY: install-cert-manager

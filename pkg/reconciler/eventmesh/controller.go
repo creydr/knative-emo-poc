@@ -41,6 +41,7 @@ func NewController(
 	r := &Reconciler{
 		eventMeshLister:  eventMeshInformer.Lister(),
 		deploymentLister: deploymentInformer.Lister(),
+		crdLister:        crdInformer.Lister(),
 		manifest:         manifest,
 		scaler:           scaler,
 	}

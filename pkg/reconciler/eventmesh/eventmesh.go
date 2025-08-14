@@ -22,10 +22,12 @@ import (
 	"strings"
 
 	mf "github.com/manifestival/manifestival"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
+	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	eventmeshreconciler "knative.dev/eventmesh-operator/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
 	operatorv1alpha1listers "knative.dev/eventmesh-operator/pkg/client/listers/operator/v1alpha1"
@@ -42,6 +44,7 @@ type Reconciler struct {
 	deploymentLister appsv1listers.DeploymentLister
 	scaler           *scaler.Scaler
 	manifest         mf.Manifest
+	crdLister        apiextensionsv1.CustomResourceDefinitionLister
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
@@ -50,12 +53,12 @@ var _ eventmeshreconciler.Interface = (*Reconciler)(nil)
 func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) reconciler.Event {
 	logger := logging.FromContext(ctx)
 
-	alreadyInstalled, err := r.hasForeignEventingInstalled(ctx, em)
+	precheckOk, err := r.runPrechecks(ctx, em)
 	if err != nil {
-		return fmt.Errorf("could not determine whether EventMesh is installed already: %v", err)
+		return fmt.Errorf("could not run prechecks: %w", err)
 	}
-	if alreadyInstalled {
-		em.Status.MarkEventMeshConditionEventMeshInstalledFalse("EventingInstalledAlready", "Knative eventing components seem to be installed already and not owned by the EventMesh")
+	if !precheckOk {
+		// prechecks failed and they set the status on their own
 		return nil
 	}
 
@@ -199,4 +202,50 @@ func (r *Reconciler) applyScalingForIMC(ctx context.Context, manifests *knmf.Man
 			mtBrokerScaleTarget))
 
 	return nil
+}
+
+// runPrechecks runs some prechecks before applying the manifests.
+// returns true if all checks were passed or false if at least one check failed
+func (r *Reconciler) runPrechecks(ctx context.Context, em *v1alpha1.EventMesh) (bool, error) {
+	// check if eventing is installed already and not owned by EM
+	alreadyInstalled, err := r.hasForeignEventingInstalled(ctx, em)
+	if err != nil {
+		return false, fmt.Errorf("could not determine whether EventMesh is installed already: %v", err)
+	}
+	if alreadyInstalled {
+		em.Status.MarkEventMeshConditionEventMeshInstalledFalse("EventingInstalledAlready", "Knative eventing components seem to be installed already and not owned by the EventMesh")
+		return false, nil
+	}
+
+	// check if transport-encryption is enabled and required cert-manager is installed
+	featuresFlags, err := em.Spec.GetFeatureFlags()
+	if err != nil {
+		return false, fmt.Errorf("could not get feature flags: %v", err)
+	}
+	if !featuresFlags.IsDisabledTransportEncryption() {
+		// TLS is enabled, we need cert-manager
+		certManagerInstalled, err := r.hasCertManagerInstalled()
+		if err != nil {
+			return false, fmt.Errorf("could not determine whether cert-manager is installed: %v", err)
+		}
+		if !certManagerInstalled {
+			em.Status.MarkEventMeshConditionEventMeshInstalledFalse("CertManagerRequired", "Feature %s is enabled, but cert-manager seems not to be installed", feature.TransportEncryption)
+			return false, nil
+		}
+	}
+
+	// all checks passed
+	return true, nil
+}
+
+func (r *Reconciler) hasCertManagerInstalled() (bool, error) {
+	_, err := r.crdLister.Get("certificates.cert-manager.io")
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get certificates.cert-manager.io CRD: %w", err)
+	}
+
+	return true, nil
 }
