@@ -77,6 +77,9 @@ type EventMeshSpec struct {
 
 	// +optional
 	Features map[string]string `json:"features,omitempty"`
+
+	// +optional
+	Overrides *EventMeshSpecOverrides `json:"overrides,omitempty"`
 }
 
 type EventMeshSpecKafka struct {
@@ -93,6 +96,11 @@ type EventMeshSpecKafka struct {
 
 	// +optional
 	TopicConfigOptions map[string]string `json:"topicConfigOptions,omitempty"`
+}
+
+type EventMeshSpecOverrides struct {
+	// +optional
+	Config map[string]map[string]string `json:"config,omitempty"`
 }
 
 type EventMeshStatus struct {
