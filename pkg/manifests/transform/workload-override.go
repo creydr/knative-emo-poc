@@ -1,36 +1,23 @@
-/*
-Copyright 2020 The Knative Authors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-package common
+package transform
 
 import (
 	mf "github.com/manifestival/manifestival"
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/scheme"
-
-	"knative.dev/operator/pkg/apis/operator/base"
+	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 )
 
-// OverridesTransform transforms deployments based on the configuration in `spec.overrides`.
-func OverridesTransform(overrides []base.WorkloadOverride, log *zap.SugaredLogger) mf.Transformer {
+// Source copied from https://github.com/knative/operator/blob/650497b2493703ac73d5b50ef2fbf70e5dc57bba/pkg/reconciler/common/workload_override.go#L33
+// due to dependency issues
+
+// WorkloadsOverride transforms deployments based on the configuration in `spec.overrides`.
+func WorkloadsOverride(overrides []v1alpha1.WorkloadOverride) mf.Transformer {
 	if overrides == nil {
 		return nil
 	}
@@ -107,7 +94,75 @@ func OverridesTransform(overrides []base.WorkloadOverride, log *zap.SugaredLogge
 	}
 }
 
-func replaceAnnotations(override *base.WorkloadOverride, obj metav1.Object, ps *corev1.PodTemplateSpec) {
+// When a Podspecable has HPA or a custom autoscaling, the replicas should be controlled by it instead of operator.
+// Hence, skip changing the spec.replicas for these Podspecables.
+func hasHorizontalPodOrCustomAutoscaler(name string) bool {
+	return sets.NewString(
+		"webhook",
+		"eventing-webhook",
+		"mt-broker-ingress",
+		"mt-broker-filter",
+		"kafka-broker-dispatcher",
+		"kafka-source-dispatcher",
+		"kafka-channel-dispatcher",
+	).Has(name)
+}
+
+// Maps a Podspecables name to the HPAs name.
+// Add overrides here, if your HPA is named differently to the workloads name,
+// if no override is defined, the name of the podspecable is used as HPA name.
+func getHPAName(podspecableName string) string {
+	overrides := map[string]string{
+		"mt-broker-ingress": "broker-ingress-hpa",
+		"mt-broker-filter":  "broker-filter-hpa",
+	}
+	if v, ok := overrides[podspecableName]; ok {
+		return v
+	} else {
+		return podspecableName
+	}
+}
+
+// hpaTransform sets the minReplicas and maxReplicas of an HPA based on a replica override value.
+// If minReplica needs to be increased, the maxReplica is increased by the same value.
+func hpaTransform(u *unstructured.Unstructured, replicas int64) error {
+	if u.GetKind() != "HorizontalPodAutoscaler" {
+		return nil
+	}
+
+	min, _, err := unstructured.NestedInt64(u.Object, "spec", "minReplicas")
+	if err != nil {
+		return err
+	}
+
+	// Do nothing if the HPA ships with even more replicas out of the box.
+	if min >= replicas {
+		return nil
+	}
+
+	if err := unstructured.SetNestedField(u.Object, replicas, "spec", "minReplicas"); err != nil {
+		return err
+	}
+
+	max, found, err := unstructured.NestedInt64(u.Object, "spec", "maxReplicas")
+	if err != nil {
+		return err
+	}
+
+	// Do nothing if maxReplicas is not defined.
+	if !found {
+		return nil
+	}
+
+	// Increase maxReplicas to the amount that we increased,
+	// because we need to avoid minReplicas > maxReplicas happening.
+	if err := unstructured.SetNestedField(u.Object, max+(replicas-min), "spec", "maxReplicas"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func replaceAnnotations(override *v1alpha1.WorkloadOverride, obj metav1.Object, ps *corev1.PodTemplateSpec) {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(map[string]string{})
 	}
@@ -120,7 +175,7 @@ func replaceAnnotations(override *base.WorkloadOverride, obj metav1.Object, ps *
 	}
 }
 
-func replaceLabels(override *base.WorkloadOverride, obj metav1.Object, ps *corev1.PodTemplateSpec) {
+func replaceLabels(override *v1alpha1.WorkloadOverride, obj metav1.Object, ps *corev1.PodTemplateSpec) {
 	if obj.GetLabels() == nil {
 		obj.SetLabels(map[string]string{})
 	}
@@ -133,31 +188,31 @@ func replaceLabels(override *base.WorkloadOverride, obj metav1.Object, ps *corev
 	}
 }
 
-func replaceNodeSelector(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceNodeSelector(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if len(override.NodeSelector) > 0 {
 		ps.Spec.NodeSelector = override.NodeSelector
 	}
 }
 
-func replaceTopologySpreadConstraints(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceTopologySpreadConstraints(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if len(override.TopologySpreadConstraints) > 0 {
 		ps.Spec.TopologySpreadConstraints = override.TopologySpreadConstraints
 	}
 }
 
-func replaceTolerations(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceTolerations(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if len(override.Tolerations) > 0 {
 		ps.Spec.Tolerations = override.Tolerations
 	}
 }
 
-func replaceAffinities(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceAffinities(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if override.Affinity != nil {
 		ps.Spec.Affinity = override.Affinity
 	}
 }
 
-func replaceResources(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceResources(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if len(override.Resources) > 0 {
 		containers := ps.Spec.Containers
 		for i := range containers {
@@ -169,7 +224,7 @@ func replaceResources(override *base.WorkloadOverride, ps *corev1.PodTemplateSpe
 	}
 }
 
-func replaceEnv(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceEnv(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if len(override.Env) > 0 {
 		containers := ps.Spec.Containers
 		for i := range containers {
@@ -180,7 +235,7 @@ func replaceEnv(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	}
 }
 
-func replaceProbes(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceProbes(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if len(override.ReadinessProbes) > 0 {
 		containers := ps.Spec.Containers
 		for i := range containers {
@@ -235,7 +290,7 @@ func replaceProbes(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) 
 	}
 }
 
-func replaceHostNetwork(override *base.WorkloadOverride, ps *corev1.PodTemplateSpec) {
+func replaceHostNetwork(override *v1alpha1.WorkloadOverride, ps *corev1.PodTemplateSpec) {
 	if override.HostNetwork != nil {
 		ps.Spec.HostNetwork = *override.HostNetwork
 
@@ -243,4 +298,73 @@ func replaceHostNetwork(override *base.WorkloadOverride, ps *corev1.PodTemplateS
 			ps.Spec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
 		}
 	}
+}
+
+func merge(src, tgt *corev1.ResourceList) {
+	if len(*tgt) > 0 {
+		for k, v := range *src {
+			(*tgt)[k] = v
+		}
+	} else {
+		*tgt = *src
+	}
+}
+
+func find(resources []v1alpha1.ResourceRequirementsOverride, name string) *v1alpha1.ResourceRequirementsOverride {
+	for _, override := range resources {
+		if override.Container == name {
+			return &override
+		}
+	}
+	return nil
+}
+
+func mergeEnv(src, tgt *[]corev1.EnvVar) {
+	if len(*tgt) > 0 {
+		for _, srcV := range *src {
+			exists := false
+			for i, tgtV := range *tgt {
+				if srcV.Name == tgtV.Name {
+					(*tgt)[i] = srcV
+					exists = true
+				}
+			}
+			if !exists {
+				*tgt = append(*tgt, srcV)
+			}
+		}
+	} else {
+		*tgt = *src
+	}
+}
+
+func findEnvOverride(resources []v1alpha1.EnvRequirementsOverride, name string) *v1alpha1.EnvRequirementsOverride {
+	for _, override := range resources {
+		if override.Container == name {
+			return &override
+		}
+	}
+	return nil
+}
+
+func mergeProbe(override, tgt *corev1.Probe) {
+	if override == nil {
+		return
+	}
+	var merged corev1.Probe
+	jtgt, _ := json.Marshal(*tgt)
+	_ = json.Unmarshal(jtgt, &merged)
+	jsrc, _ := json.Marshal(*override)
+	_ = json.Unmarshal(jsrc, &merged)
+	jmerged, _ := json.Marshal(merged)
+	_ = json.Unmarshal(jmerged, tgt)
+}
+
+func findProbeOverride(probes []v1alpha1.ProbesRequirementsOverride, name string) *v1alpha1.ProbesRequirementsOverride {
+	for _, override := range probes {
+		if override.Container == name {
+			return &override
+		}
+	}
+	return nil
 }

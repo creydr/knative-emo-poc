@@ -1,7 +1,6 @@
 package manifests
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -11,10 +10,10 @@ import (
 	"knative.dev/pkg/system"
 )
 
-func ForEventingKafkaBroker(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
+func ForEventingKafkaBroker(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := &Manifests{}
 
-	coreManifests, err := eventingKafkaBrokerCoreManifests(ctx, em)
+	coreManifests, err := eventingKafkaBrokerCoreManifests(em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load EKB core manifests: %w", err)
 	}
@@ -26,7 +25,7 @@ func ForEventingKafkaBroker(ctx context.Context, em *v1alpha1.EventMesh) (*Manif
 	return manifests, nil
 }
 
-func eventingKafkaBrokerCoreManifests(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
+func eventingKafkaBrokerCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	coreManifests, err := loadEventingKafkaBrokerCoreManifests()
@@ -49,7 +48,7 @@ func eventingKafkaBrokerCoreManifests(ctx context.Context, em *v1alpha1.EventMes
 	return &manifests, nil
 }
 
-func eventingKafkaBrokerTLSManifests(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
+func eventingKafkaBrokerTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	tlsManifests, err := loadManifests("eventing-kafka-broker-latest", "eventing-kafka-tls-networking.yaml")

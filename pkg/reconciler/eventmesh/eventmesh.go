@@ -66,7 +66,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 
 	// Get eventing manifests
 	logger.Debug("Loading eventing core manifests")
-	eventingManifests, err := knmf.ForEventing(ctx, em)
+	eventingManifests, err := knmf.ForEventing(em)
 	if err != nil {
 		return fmt.Errorf("failed to get eventing manifests: %w", err)
 	}
@@ -74,7 +74,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 
 	// Get EKB manifests
 	logger.Debug("Loading eventing-kafka-broker manifests")
-	ekbManifests, err := knmf.ForEventingKafkaBroker(ctx, em)
+	ekbManifests, err := knmf.ForEventingKafkaBroker(em)
 	if err != nil {
 		return fmt.Errorf("failed to get EKB manifests: %w", err)
 	}
