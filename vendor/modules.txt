@@ -95,6 +95,12 @@ github.com/gobuffalo/flect
 ## explicit; go 1.15
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
+# github.com/golang/protobuf v1.5.4
+## explicit; go 1.17
+github.com/golang/protobuf/jsonpb
+github.com/golang/protobuf/proto
+github.com/golang/protobuf/ptypes/duration
+github.com/golang/protobuf/ptypes/wrappers
 # github.com/google/gnostic-models v0.6.9
 ## explicit; go 1.21
 github.com/google/gnostic-models/compiler
@@ -410,6 +416,8 @@ golang.org/x/tools/internal/versions
 gomodules.xyz/jsonpatch/v2
 # google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822
 ## explicit; go 1.23.0
+google.golang.org/genproto/googleapis/api
+google.golang.org/genproto/googleapis/api/annotations
 google.golang.org/genproto/googleapis/api/httpbody
 # google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822
 ## explicit; go 1.23.0
@@ -489,6 +497,7 @@ google.golang.org/protobuf/internal/descfmt
 google.golang.org/protobuf/internal/descopts
 google.golang.org/protobuf/internal/detrand
 google.golang.org/protobuf/internal/editiondefaults
+google.golang.org/protobuf/internal/editionssupport
 google.golang.org/protobuf/internal/encoding/defval
 google.golang.org/protobuf/internal/encoding/json
 google.golang.org/protobuf/internal/encoding/messageset
@@ -508,11 +517,13 @@ google.golang.org/protobuf/internal/strs
 google.golang.org/protobuf/internal/version
 google.golang.org/protobuf/proto
 google.golang.org/protobuf/protoadapt
+google.golang.org/protobuf/reflect/protodesc
 google.golang.org/protobuf/reflect/protoreflect
 google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
+google.golang.org/protobuf/types/gofeaturespb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/fieldmaskpb
@@ -528,6 +539,10 @@ gopkg.in/inf.v0
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
+# istio.io/api v0.0.0-20231206023236-e7cadb36da57
+## explicit; go 1.18
+istio.io/api/networking/v1beta1
+istio.io/api/type/v1beta1
 # k8s.io/api v0.33.1
 ## explicit; go 1.24.0
 k8s.io/api/admission/v1
@@ -1025,6 +1040,10 @@ k8s.io/utils/net
 k8s.io/utils/pointer
 k8s.io/utils/ptr
 k8s.io/utils/trace
+# knative.dev/caching v0.0.0-20250716150501-fd36b19e8e44
+## explicit; go 1.24.0
+knative.dev/caching/pkg/apis/caching
+knative.dev/caching/pkg/apis/caching/v1alpha1
 # knative.dev/eventing v0.46.0
 ## explicit; go 1.24.0
 knative.dev/eventing/pkg/apis/common/integration/v1alpha1
@@ -1116,6 +1135,12 @@ knative.dev/hack/schema/commands
 knative.dev/hack/schema/docs
 knative.dev/hack/schema/registry
 knative.dev/hack/schema/schema
+# knative.dev/operator v0.46.0
+## explicit; go 1.24.0
+knative.dev/operator/pkg/apis/operator
+knative.dev/operator/pkg/apis/operator/base
+knative.dev/operator/pkg/apis/operator/v1beta1
+knative.dev/operator/pkg/reconciler/common
 # knative.dev/pkg v0.0.0-20250728131637-f6a99aca71fd
 ## explicit; go 1.24.0
 knative.dev/pkg/apis

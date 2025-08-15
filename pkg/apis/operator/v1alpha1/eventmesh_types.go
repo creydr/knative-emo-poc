@@ -6,6 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"knative.dev/eventing/pkg/apis/feature"
+	"knative.dev/operator/pkg/apis/operator/base"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/kmeta"
@@ -77,6 +78,9 @@ type EventMeshSpec struct {
 
 	// +optional
 	Features map[string]string `json:"features,omitempty"`
+
+	// +optional
+	Overrides *EventMeshSpecOverrides `json:"overrides,omitempty"`
 }
 
 type EventMeshSpecKafka struct {
@@ -93,6 +97,16 @@ type EventMeshSpecKafka struct {
 
 	// +optional
 	TopicConfigOptions map[string]string `json:"topicConfigOptions,omitempty"`
+}
+
+type EventMeshSpecOverrides struct {
+	// TODO: think about using own types, as we get otherwise a dependency to knative-operator
+
+	// +optional
+	Config base.ConfigMapData `json:"config,omitempty"`
+
+	// +optional
+	Workloads []base.WorkloadOverride `json:"workloads,omitempty"`
 }
 
 type EventMeshStatus struct {

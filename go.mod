@@ -16,6 +16,7 @@ require (
 	knative.dev/eventing v0.46.0
 	knative.dev/hack v0.0.0-20250708013849-70d4b00da6ba
 	knative.dev/hack/schema v0.0.0-20250708013849-70d4b00da6ba
+	knative.dev/operator v0.46.0
 	knative.dev/pkg v0.0.0-20250728131637-f6a99aca71fd
 
 )
@@ -42,6 +43,7 @@ require (
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/gobuffalo/flect v1.0.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
@@ -103,11 +105,13 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	istio.io/api v0.0.0-20231206023236-e7cadb36da57 // indirect
 	k8s.io/apiserver v0.33.1 // indirect
 	k8s.io/gengo/v2 v2.0.0-20250207200755-1244d31929d7 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	k8s.io/utils v0.0.0-20241210054802-24370beab758 // indirect
+	knative.dev/caching v0.0.0-20250716150501-fd36b19e8e44 // indirect
 	sigs.k8s.io/controller-runtime v0.19.0 // indirect
 	sigs.k8s.io/gateway-api v1.1.0 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect

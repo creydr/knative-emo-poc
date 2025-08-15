@@ -1,36 +1,39 @@
 package manifests
 
 import (
+	context "context"
 	"fmt"
 
 	mf "github.com/manifestival/manifestival"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	"knative.dev/eventmesh-operator/pkg/manifests/transform"
+	"knative.dev/operator/pkg/reconciler/common"
+	"knative.dev/pkg/logging"
 )
 
 // ForEventing returns the configured manifests for eventing
-func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
+func ForEventing(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := &Manifests{}
 
-	coreManifests, err := eventingCoreManifests(em)
+	coreManifests, err := eventingCoreManifests(ctx, em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing core manifests: %w", err)
 	}
 	manifests.Append(coreManifests)
 
-	imcManifests, err := eventingIMCManifests(em)
+	imcManifests, err := eventingIMCManifests(ctx, em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing IMC manifests: %w", err)
 	}
 	manifests.Append(imcManifests)
 
-	mtBrokerManifests, err := eventingMTBrokerManifests(em)
+	mtBrokerManifests, err := eventingMTBrokerManifests(ctx, em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing MT channel Broker manifests: %w", err)
 	}
 	manifests.Append(mtBrokerManifests)
 
-	tlsManifests, err := eventingTLSManifests(em)
+	tlsManifests, err := eventingTLSManifests(ctx, em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing tls manifests: %w", err)
 	}
@@ -41,7 +44,8 @@ func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return manifests, nil
 }
 
-func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func eventingCoreManifests(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
+	logger := logging.FromContext(ctx)
 	manifests := Manifests{}
 
 	coreManifests, err := loadEventingCoreManifests()
@@ -54,12 +58,14 @@ func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 		transform.EventingCoreLogging(em.Spec.LogLevel),
 		transform.DefaultChannelImplementation(em.Spec.DefaultChannel),
 		transform.DefaultBrokerClass(em.Spec.DefaultBroker, em.Spec.DefaultChannel),
-		transform.FeatureFlags(em.Spec.Features))
+		transform.FeatureFlags(em.Spec.Features),
+		common.OverridesTransform(em.Spec.Overrides.Workloads, logger),
+		common.ConfigMapTransform(em.Spec.Overrides.Config, logger))
 
 	return &manifests, nil
 }
 
-func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func eventingIMCManifests(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	imcManifests, err := loadManifests("eventing-latest", "in-memory-channel.yaml")
@@ -73,7 +79,7 @@ func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return &manifests, nil
 }
 
-func eventingMTBrokerManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func eventingMTBrokerManifests(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	mtBroker, err := loadManifests("eventing-latest", "mt-channel-broker.yaml")
@@ -87,7 +93,7 @@ func eventingMTBrokerManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return &manifests, nil
 }
 
-func eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func eventingTLSManifests(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	tlsManifests, err := loadManifests("eventing-latest", "eventing-tls-networking.yaml")
