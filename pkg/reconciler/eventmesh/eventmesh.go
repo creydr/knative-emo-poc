@@ -198,11 +198,29 @@ func (r *Reconciler) applyScalingForMTBroker(ctx context.Context, em *v1alpha1.E
 
 func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleTarget int64, manifests *knmf.Manifests, em *v1alpha1.EventMesh, logger *zap.SugaredLogger) {
 	if !em.Spec.Overrides.Workloads.GetByName(deploymentName).HasAtLeastOneWithReplicasSet() {
-		manifests.AddTransformers(
-			transform.HPAReplicas(
-				hpaName,
-				namespace,
-				scaleTarget))
+
+		if scaleTarget == 0 {
+			// we can't scale to 0 with HPA unless HPAScaleToZero feature gate is enabled. --> remove HPA and scale deployment instead
+			logger.Debug("minReplicas for %s is set to 0. This can't set set unless HPAScaleToZero feature gate is enabled. Therefor removing HPA and scaling deployment instead")
+
+			// add HPA to list of elements which should be deleted and remove from toApply list
+			hpaFilter := mf.All(mf.ByKind("HorizontalPodAutoscaler"), mf.ByName(hpaName))
+			manifests.AddToDelete(manifests.ToApply.Filter(hpaFilter))
+			manifests.FilterToApply(mf.Not(hpaFilter))
+
+			// scale deployment instead of using HPA
+			manifests.AddTransformers(
+				transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+					deploymentName,
+					namespace,
+					scaleTarget))
+		} else {
+			manifests.AddTransformers(
+				transform.HPAReplicas(
+					hpaName,
+					namespace,
+					scaleTarget))
+		}
 	} else {
 		logger.Debug("Skipping to adjust %s HPA to %d replicas, as a workload override for its deployment (%s) exists which sets the replicas already", hpaName, scaleTarget, deploymentName)
 	}
