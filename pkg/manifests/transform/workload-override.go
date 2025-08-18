@@ -1,6 +1,8 @@
 package transform
 
 import (
+	"sort"
+
 	mf "github.com/manifestival/manifestival"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -330,6 +332,11 @@ func mergeEnv(src, tgt *[]corev1.EnvVar) {
 	} else {
 		*tgt = *src
 	}
+
+	// Sort env vars by name to ensure deterministic ordering
+	sort.Slice(*tgt, func(i, j int) bool {
+		return (*tgt)[i].Name < (*tgt)[j].Name
+	})
 }
 
 func findEnvOverride(resources []v1alpha1.EnvRequirementsOverride, name string) *v1alpha1.EnvRequirementsOverride {

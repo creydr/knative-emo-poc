@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -367,9 +368,15 @@ func (b *DeploymentBuilder) WithContainerEnv(containerName string, envVars map[s
 	for i := range b.deployment.Spec.Template.Spec.Containers {
 		if b.deployment.Spec.Template.Spec.Containers[i].Name == containerName {
 			var env []corev1.EnvVar
-			for k, v := range envVars {
-				env = append(env, corev1.EnvVar{Name: k, Value: v})
+			var keys []string
+			for k := range envVars {
+				keys = append(keys, k)
 			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				env = append(env, corev1.EnvVar{Name: k, Value: envVars[k]})
+			}
+
 			b.deployment.Spec.Template.Spec.Containers[i].Env = env
 			break
 		}
