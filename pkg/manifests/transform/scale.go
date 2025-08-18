@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func Scale(gvk schema.GroupVersionKind, name string, namespace string, replicas int) mf.Transformer {
+func Scale(gvk schema.GroupVersionKind, name string, namespace string, replicas int64) mf.Transformer {
 	return func(u *unstructured.Unstructured) error {
 		scalableKinds := map[schema.GroupVersionKind]bool{
 			schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}:        true,
@@ -36,6 +36,6 @@ func Scale(gvk schema.GroupVersionKind, name string, namespace string, replicas 
 		}
 
 		// Set .spec.replicas field
-		return unstructured.SetNestedField(u.Object, int64(replicas), "spec", "replicas")
+		return unstructured.SetNestedField(u.Object, replicas, "spec", "replicas")
 	}
 }
