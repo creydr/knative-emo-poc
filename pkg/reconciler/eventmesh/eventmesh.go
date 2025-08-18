@@ -105,7 +105,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 	manifests.Sort()
 
 	// Delete old manifests
-	logger.Debug("Deleting unneeded manifests")
+	logger.Debugf("Deleting unneeded manifests (%d)", len(manifests.ToDelete.Resources()))
 	if err := r.manifest.Append(manifests.ToDelete).Delete(ctx, mf.IgnoreNotFound(true)); err != nil {
 		return fmt.Errorf("failed to delete manifests: %w", err)
 	}
@@ -201,7 +201,7 @@ func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleT
 
 		if scaleTarget == 0 {
 			// we can't scale to 0 with HPA unless HPAScaleToZero feature gate is enabled. --> remove HPA and scale deployment instead
-			logger.Debugf("minReplicas for %s is set to 0. This can't set set unless HPAScaleToZero feature gate is enabled. Therefor removing HPA and scaling deployment instead", hpaName)
+			logger.Debugf("minReplicas for %s is set to 0. This can't be set to 0 unless HPAScaleToZero feature gate is enabled. Therefor removing HPA and scaling deployment instead", hpaName)
 
 			// add HPA to list of elements which should be deleted and remove from toApply list
 			hpaFilter := mf.All(mf.ByKind("HorizontalPodAutoscaler"), mf.ByName(hpaName))
