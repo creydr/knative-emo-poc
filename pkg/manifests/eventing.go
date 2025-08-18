@@ -55,7 +55,8 @@ func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 		transform.DefaultChannelImplementation(em.Spec.DefaultChannel),
 		transform.DefaultBrokerClass(em.Spec.DefaultBroker, em.Spec.DefaultChannel),
 		transform.FeatureFlags(em.Spec.Features),
-		transform.ConfigMapOverride(em.Spec.Overrides.Config))
+		transform.ConfigMapOverride(em.Spec.Overrides.Config),
+		transform.WorkloadsOverride(em.Spec.Overrides.Workloads))
 
 	return &manifests, nil
 }

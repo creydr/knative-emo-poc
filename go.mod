@@ -17,7 +17,6 @@ require (
 	knative.dev/hack v0.0.0-20250708013849-70d4b00da6ba
 	knative.dev/hack/schema v0.0.0-20250708013849-70d4b00da6ba
 	knative.dev/pkg v0.0.0-20250728131637-f6a99aca71fd
-
 )
 
 require (
