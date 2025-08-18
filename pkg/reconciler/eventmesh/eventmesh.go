@@ -201,7 +201,7 @@ func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleT
 
 		if scaleTarget == 0 {
 			// we can't scale to 0 with HPA unless HPAScaleToZero feature gate is enabled. --> remove HPA and scale deployment instead
-			logger.Debug("minReplicas for %s is set to 0. This can't set set unless HPAScaleToZero feature gate is enabled. Therefor removing HPA and scaling deployment instead")
+			logger.Debugf("minReplicas for %s is set to 0. This can't set set unless HPAScaleToZero feature gate is enabled. Therefor removing HPA and scaling deployment instead", hpaName)
 
 			// add HPA to list of elements which should be deleted and remove from toApply list
 			hpaFilter := mf.All(mf.ByKind("HorizontalPodAutoscaler"), mf.ByName(hpaName))
@@ -222,7 +222,7 @@ func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleT
 					scaleTarget))
 		}
 	} else {
-		logger.Debug("Skipping to adjust %s HPA to %d replicas, as a workload override for its deployment (%s) exists which sets the replicas already", hpaName, scaleTarget, deploymentName)
+		logger.Debugf("Skipping to adjust %s HPA to %d replicas, as a workload override for its deployment (%s) exists which sets the replicas already", hpaName, scaleTarget, deploymentName)
 	}
 }
 
@@ -234,7 +234,7 @@ func addDeploymentScaleTransformerIfNeeded(deploymentName, namespace string, sca
 				namespace,
 				scaleTarget))
 	} else {
-		logger.Debug("Skipping to scale %s deployment to %d, as a workload override for this deployment exists which sets the replicas already", deploymentName, scaleTarget)
+		logger.Debugf("Skipping to scale %s deployment to %d, as a workload override for this deployment exists which sets the replicas already", deploymentName, scaleTarget)
 	}
 }
 
