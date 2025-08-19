@@ -4,33 +4,48 @@ import (
 	"fmt"
 
 	mf "github.com/manifestival/manifestival"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
+	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	"knative.dev/eventmesh-operator/pkg/manifests/transform"
+	"knative.dev/eventmesh-operator/pkg/utils"
 )
 
-// ForEventing returns the configured manifests for eventing
-func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
+// eventingParser parses eventing manifests
+type eventingParser struct {
+	crdLister apiextensionsv1.CustomResourceDefinitionLister
+}
+
+// NewEventingParser creates a new eventing manifest parser
+func NewEventingParser(crdLister apiextensionsv1.CustomResourceDefinitionLister) Parser {
+	return &eventingParser{
+		crdLister: crdLister,
+	}
+}
+
+// Parse returns the configured manifests for eventing
+func (p *eventingParser) Parse(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := &Manifests{}
 
-	coreManifests, err := eventingCoreManifests(em)
+	coreManifests, err := p.eventingCoreManifests(em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing core manifests: %w", err)
 	}
 	manifests.Append(coreManifests)
 
-	imcManifests, err := eventingIMCManifests(em)
+	imcManifests, err := p.eventingIMCManifests(em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing IMC manifests: %w", err)
 	}
 	manifests.Append(imcManifests)
 
-	mtBrokerManifests, err := eventingMTBrokerManifests(em)
+	mtBrokerManifests, err := p.eventingMTBrokerManifests(em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing MT channel Broker manifests: %w", err)
 	}
 	manifests.Append(mtBrokerManifests)
 
-	tlsManifests, err := eventingTLSManifests(em)
+	tlsManifests, err := p.eventingTLSManifests(em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing tls manifests: %w", err)
 	}
@@ -41,10 +56,10 @@ func ForEventing(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return manifests, nil
 }
 
-func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func (p *eventingParser) eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
-	coreManifests, err := loadEventingCoreManifests()
+	coreManifests, err := p.loadEventingCoreManifests()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing core manifests: %w", err)
 	}
@@ -61,7 +76,7 @@ func eventingCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return &manifests, nil
 }
 
-func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func (p *eventingParser) eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	imcManifests, err := loadManifests("eventing-latest", "in-memory-channel.yaml")
@@ -75,7 +90,7 @@ func eventingIMCManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return &manifests, nil
 }
 
-func eventingMTBrokerManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func (p *eventingParser) eventingMTBrokerManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	mtBroker, err := loadManifests("eventing-latest", "mt-channel-broker.yaml")
@@ -89,12 +104,17 @@ func eventingMTBrokerManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return &manifests, nil
 }
 
-func eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func (p *eventingParser) eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	tlsManifests, err := loadManifests("eventing-latest", "eventing-tls-networking.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eventing TLS manifests: %w", err)
+	}
+
+	certManagerIsInstalled, err := utils.IsCertmanagerInstalled(p.crdLister)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if cert-manager is installed: %w", err)
 	}
 
 	features, err := em.Spec.GetFeatureFlags()
@@ -103,16 +123,21 @@ func eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	}
 
 	if !features.IsDisabledTransportEncryption() {
-		// here we need certmanager too
-		manifests.AddToApply(tlsManifests)
+		if certManagerIsInstalled {
+			manifests.AddToApply(tlsManifests)
+		} else {
+			return nil, fmt.Errorf("%s is set to %s, but cert-manager is not installed", feature.TransportEncryption, features[feature.TransportEncryption])
+		}
 	} else {
-		manifests.AddToDelete(tlsManifests)
+		if certManagerIsInstalled {
+			manifests.AddToDelete(tlsManifests)
+		}
 	}
 
 	return &manifests, nil
 }
 
-func loadEventingCoreManifests() (mf.Manifest, error) {
+func (p *eventingParser) loadEventingCoreManifests() (mf.Manifest, error) {
 	eventingCoreFiles := []string{
 		"eventing-crds.yaml",
 		"eventing-core.yaml",

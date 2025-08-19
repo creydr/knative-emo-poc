@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	eventmeshinformer "knative.dev/eventmesh-operator/pkg/client/injection/informers/operator/v1alpha1/eventmesh"
 	eventmeshreconciler "knative.dev/eventmesh-operator/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
+	"knative.dev/eventmesh-operator/pkg/manifests"
 	"knative.dev/eventmesh-operator/pkg/scaler"
 	crdinformer "knative.dev/pkg/client/injection/apiextensions/informers/apiextensions/v1/customresourcedefinition"
 	deploymentinformer "knative.dev/pkg/client/injection/kube/informers/apps/v1/deployment"
@@ -38,12 +39,17 @@ func NewController(
 	mflogger := zapr.NewLogger(logger.Named("manifestival").Desugar())
 	manifest, _ := mf.ManifestFrom(mf.Slice{}, mf.UseClient(mfclient), mf.UseLogger(mflogger))
 
+	eventingParser := manifests.NewEventingParser(crdInformer.Lister())
+	kafkaBrokerParser := manifests.NewKafkaBrokerParser()
+
 	r := &Reconciler{
-		eventMeshLister:  eventMeshInformer.Lister(),
-		deploymentLister: deploymentInformer.Lister(),
-		crdLister:        crdInformer.Lister(),
-		manifest:         manifest,
-		scaler:           scaler,
+		eventMeshLister:   eventMeshInformer.Lister(),
+		deploymentLister:  deploymentInformer.Lister(),
+		crdLister:         crdInformer.Lister(),
+		manifest:          manifest,
+		scaler:            scaler,
+		eventingParser:    eventingParser,
+		kafkaBrokerParser: kafkaBrokerParser,
 	}
 
 	impl := eventmeshreconciler.NewImpl(ctx, r)

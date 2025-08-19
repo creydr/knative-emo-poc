@@ -10,10 +10,19 @@ import (
 	"knative.dev/pkg/system"
 )
 
-func ForEventingKafkaBroker(em *v1alpha1.EventMesh) (*Manifests, error) {
+// kafkaBrokerParser parses Kafka broker manifests
+type kafkaBrokerParser struct{}
+
+// NewKafkaBrokerParser creates a new Kafka broker manifest parser
+func NewKafkaBrokerParser() Parser {
+	return &kafkaBrokerParser{}
+}
+
+// Parse returns the configured manifests for Kafka broker
+func (p *kafkaBrokerParser) Parse(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := &Manifests{}
 
-	coreManifests, err := eventingKafkaBrokerCoreManifests(em)
+	coreManifests, err := p.eventingKafkaBrokerCoreManifests(em)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load EKB core manifests: %w", err)
 	}
@@ -25,17 +34,17 @@ func ForEventingKafkaBroker(em *v1alpha1.EventMesh) (*Manifests, error) {
 	return manifests, nil
 }
 
-func eventingKafkaBrokerCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func (p *kafkaBrokerParser) eventingKafkaBrokerCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
-	coreManifests, err := loadEventingKafkaBrokerCoreManifests()
+	coreManifests, err := p.loadEventingKafkaBrokerCoreManifests()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load EKB core manifests: %w", err)
 	}
 	manifests.AddToApply(coreManifests)
 
 	// we need a CM for the kafka-channel template
-	manifests.AddToApply(eventingKafkaChannelTemplateConfigMap(em))
+	manifests.AddToApply(p.eventingKafkaChannelTemplateConfigMap(em))
 
 	manifests.AddTransformers(
 		transform.KafkaLogging(em.Spec.LogLevel),
@@ -48,7 +57,7 @@ func eventingKafkaBrokerCoreManifests(em *v1alpha1.EventMesh) (*Manifests, error
 	return &manifests, nil
 }
 
-func eventingKafkaBrokerTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
+func (p *kafkaBrokerParser) eventingKafkaBrokerTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := Manifests{}
 
 	tlsManifests, err := loadManifests("eventing-kafka-broker-latest", "eventing-kafka-tls-networking.yaml")
@@ -70,7 +79,7 @@ func eventingKafkaBrokerTLSManifests(em *v1alpha1.EventMesh) (*Manifests, error)
 	return &manifests, nil
 }
 
-func loadEventingKafkaBrokerCoreManifests() (mf.Manifest, error) {
+func (p *kafkaBrokerParser) loadEventingKafkaBrokerCoreManifests() (mf.Manifest, error) {
 	ekbCoreFiles := []string{
 		"eventing-kafka-controller.yaml",
 		"eventing-kafka-broker.yaml",
@@ -82,7 +91,7 @@ func loadEventingKafkaBrokerCoreManifests() (mf.Manifest, error) {
 	return loadManifests("eventing-kafka-broker-latest", ekbCoreFiles...)
 }
 
-func eventingKafkaChannelTemplateConfigMap(em *v1alpha1.EventMesh) mf.Manifest {
+func (p *kafkaBrokerParser) eventingKafkaChannelTemplateConfigMap(em *v1alpha1.EventMesh) mf.Manifest {
 	cm := fmt.Sprintf(`apiVersion: v1
 kind: ConfigMap
 metadata:
