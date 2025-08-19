@@ -65,7 +65,7 @@ func WorkloadsOverride(overrides []v1alpha1.WorkloadOverride) mf.Transformer {
 
 			if u.GetKind() == "HorizontalPodAutoscaler" && override.Replicas != nil && u.GetName() == getHPAName(override.Name) {
 				overrideReplicas := int64(*override.Replicas)
-				if err := hpaTransform(u, overrideReplicas); err != nil {
+				if err := HPAReplicas(u.GetName(), u.GetNamespace(), overrideReplicas)(u); err != nil {
 					return err
 				}
 			}
@@ -122,40 +122,6 @@ func getHPAName(podspecableName string) string {
 	} else {
 		return podspecableName
 	}
-}
-
-// hpaTransform sets the minReplicas and maxReplicas of an HPA based on a replica override value.
-// If minReplica needs to be increased, the maxReplica is increased by the same value.
-func hpaTransform(u *unstructured.Unstructured, minReplicas int64) error {
-	if u.GetKind() != "HorizontalPodAutoscaler" {
-		return nil
-	}
-
-	min, _, err := unstructured.NestedInt64(u.Object, "spec", "minReplicas")
-	if err != nil {
-		return err
-	}
-
-	if err := unstructured.SetNestedField(u.Object, minReplicas, "spec", "minReplicas"); err != nil {
-		return err
-	}
-
-	max, found, err := unstructured.NestedInt64(u.Object, "spec", "maxReplicas")
-	if err != nil {
-		return err
-	}
-
-	// Do nothing if maxReplicas is not defined.
-	if !found {
-		return nil
-	}
-
-	// Increase maxReplicas to the amount that we increased,
-	// because we need to avoid minReplicas > maxReplicas happening.
-	if err := unstructured.SetNestedField(u.Object, max+(minReplicas-min), "spec", "maxReplicas"); err != nil {
-		return err
-	}
-	return nil
 }
 
 func replaceAnnotations(override *v1alpha1.WorkloadOverride, obj metav1.Object, ps *corev1.PodTemplateSpec) {

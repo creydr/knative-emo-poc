@@ -55,8 +55,8 @@ func New(ctx context.Context) *Scaler {
 	}
 }
 
-func (s *Scaler) IMCScaleTarget() (int, error) {
-	var imcScaleTarget int
+func (s *Scaler) IMCScaleTarget() (int64, error) {
+	var imcScaleTarget int64
 
 	imcLister := s.dynamicIMCInformer.Lister().Load()
 
@@ -81,8 +81,8 @@ func (s *Scaler) IMCScaleTarget() (int, error) {
 	return imcScaleTarget, nil
 }
 
-func (s *Scaler) MTBrokerScaleTarget() (int, error) {
-	var mtBrokerScaleTarget int
+func (s *Scaler) MTBrokerScaleTarget() (int64, error) {
+	var mtBrokerScaleTarget int64
 	brokerLister := s.dynamicBrokerInfomer.Lister().Load()
 
 	if brokerLister == nil || *brokerLister == nil {
@@ -111,11 +111,6 @@ func (s *Scaler) MTBrokerScaleTarget() (int, error) {
 	}
 
 	return mtBrokerScaleTarget, nil
-}
-
-func (s *Scaler) KafkaBrokerScaleTarget() int {
-	panic("implement me")
-	return 0
 }
 
 func (s *Scaler) CRDEventHandler(ctx context.Context, globalResync func(interface{})) cache.ResourceEventHandler {

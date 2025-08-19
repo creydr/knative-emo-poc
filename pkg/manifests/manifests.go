@@ -62,6 +62,10 @@ func (m *Manifests) Append(manifests *Manifests) {
 	m.AddTransformers(manifests.Transformers...)
 }
 
+func (m *Manifests) FilterToApply(predicate mf.Predicate) {
+	m.ToApply = m.ToApply.Filter(predicate)
+}
+
 func loadManifests(dirname string, filenames ...string) (mf.Manifest, error) {
 	manifests := mf.Manifest{}
 	for _, file := range filenames {

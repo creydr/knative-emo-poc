@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	mf "github.com/manifestival/manifestival"
+	"go.uber.org/zap"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -80,7 +81,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 	}
 	manifests.Append(ekbManifests)
 
-	if err := r.applyScaling(ctx, &manifests); err != nil {
+	if err := r.applyScaling(ctx, em, &manifests); err != nil {
 		return fmt.Errorf("failed to apply Scaling: %w", err)
 	}
 
@@ -104,7 +105,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 	manifests.Sort()
 
 	// Delete old manifests
-	logger.Debug("Deleting unneeded manifests")
+	logger.Debugf("Deleting unneeded manifests (%d)", len(manifests.ToDelete.Resources()))
 	if err := r.manifest.Append(manifests.ToDelete).Delete(ctx, mf.IgnoreNotFound(true)); err != nil {
 		return fmt.Errorf("failed to delete manifests: %w", err)
 	}
@@ -148,15 +149,19 @@ func (r *Reconciler) hasForeignEventingInstalled(ctx context.Context, em *v1alph
 	return true, nil
 }
 
-func (r *Reconciler) applyScaling(ctx context.Context, manifests *knmf.Manifests) error {
-	if err := r.applyScalingForIMC(ctx, manifests); err != nil {
+func (r *Reconciler) applyScaling(ctx context.Context, em *v1alpha1.EventMesh, manifests *knmf.Manifests) error {
+	if err := r.applyScalingForIMC(ctx, em, manifests); err != nil {
 		return fmt.Errorf("failed to apply Scaling for IMC: %w", err)
+	}
+
+	if err := r.applyScalingForMTBroker(ctx, em, manifests); err != nil {
+		return fmt.Errorf("failed to apply Scaling for MT broker: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Reconciler) applyScalingForIMC(ctx context.Context, manifests *knmf.Manifests) error {
+func (r *Reconciler) applyScalingForIMC(ctx context.Context, em *v1alpha1.EventMesh, manifests *knmf.Manifests) error {
 	logger := logging.FromContext(ctx).With("scaler", "imc")
 
 	imcScaleTarget, err := r.scaler.IMCScaleTarget()
@@ -164,42 +169,73 @@ func (r *Reconciler) applyScalingForIMC(ctx context.Context, manifests *knmf.Man
 		return fmt.Errorf("failed to get scale target for IMC components: %w", err)
 	}
 
+	logger.Debugf("Scaling in-memory channel components to %d", imcScaleTarget)
+
+	// scale imc deployments directly as they are not managed via HPA
+	addDeploymentScaleTransformerIfNeeded("imc-dispatcher", system.Namespace(), imcScaleTarget, manifests, em, logger)
+	addDeploymentScaleTransformerIfNeeded("imc-controller", system.Namespace(), imcScaleTarget, manifests, em, logger)
+
+	return nil
+}
+
+func (r *Reconciler) applyScalingForMTBroker(ctx context.Context, em *v1alpha1.EventMesh, manifests *knmf.Manifests) error {
+	logger := logging.FromContext(ctx).With("scaler", "mt-broker")
+
 	mtBrokerScaleTarget, err := r.scaler.MTBrokerScaleTarget()
 	if err != nil {
 		return fmt.Errorf("failed to get scale target for MT Broker components: %w", err)
 	}
 
-	logger.Debugf("Scaling in-memory channel components to %d and mt broker components to %d", imcScaleTarget, mtBrokerScaleTarget)
+	logger.Debugf("Scaling mt broker components to %d", mtBrokerScaleTarget)
 
-	manifests.AddTransformers(
-		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-			"imc-dispatcher",
-			"knative-eventing",
-			imcScaleTarget))
-	manifests.AddTransformers(
-		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-			"imc-controller",
-			"knative-eventing",
-			imcScaleTarget))
-
-	// TODO: check if this fights with the HorizontalPodAutoscalers broker-ingress-hpa and broker-filter-hpa
-	manifests.AddTransformers(
-		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-			"mt-broker-filter",
-			"knative-eventing",
-			mtBrokerScaleTarget))
-	manifests.AddTransformers(
-		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-			"mt-broker-ingress",
-			"knative-eventing",
-			mtBrokerScaleTarget))
-	manifests.AddTransformers(
-		transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
-			"mt-broker-controller",
-			"knative-eventing",
-			mtBrokerScaleTarget))
+	addHPATransformerIfNeeded("broker-filter-hpa", "mt-broker-filter", system.Namespace(), mtBrokerScaleTarget, manifests, em, logger)
+	addHPATransformerIfNeeded("broker-ingress-hpa", "mt-ingress-filter", system.Namespace(), mtBrokerScaleTarget, manifests, em, logger)
+	// mt-broker controller is not managed via HPA therefor scale deployment directly
+	addDeploymentScaleTransformerIfNeeded("mt-broker-controller", system.Namespace(), mtBrokerScaleTarget, manifests, em, logger)
 
 	return nil
+}
+
+func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleTarget int64, manifests *knmf.Manifests, em *v1alpha1.EventMesh, logger *zap.SugaredLogger) {
+	if !em.Spec.Overrides.Workloads.GetByName(deploymentName).HasAtLeastOneWithReplicasSet() {
+
+		if scaleTarget == 0 {
+			// we can't scale to 0 with HPA unless HPAScaleToZero feature gate is enabled. --> remove HPA and scale deployment instead
+			logger.Debugf("minReplicas for %s is set to 0. This can't be set to 0 unless HPAScaleToZero feature gate is enabled. Therefor removing HPA and scaling deployment instead", hpaName)
+
+			// add HPA to list of elements which should be deleted and remove from toApply list
+			hpaFilter := mf.All(mf.ByKind("HorizontalPodAutoscaler"), mf.ByName(hpaName))
+			manifests.AddToDelete(manifests.ToApply.Filter(hpaFilter))
+			manifests.FilterToApply(mf.Not(hpaFilter))
+
+			// scale deployment instead of using HPA
+			manifests.AddTransformers(
+				transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+					deploymentName,
+					namespace,
+					scaleTarget))
+		} else {
+			manifests.AddTransformers(
+				transform.HPAReplicas(
+					hpaName,
+					namespace,
+					scaleTarget))
+		}
+	} else {
+		logger.Debugf("Skipping to adjust %s HPA to %d replicas, as a workload override for its deployment (%s) exists which sets the replicas already", hpaName, scaleTarget, deploymentName)
+	}
+}
+
+func addDeploymentScaleTransformerIfNeeded(deploymentName, namespace string, scaleTarget int64, manifests *knmf.Manifests, em *v1alpha1.EventMesh, logger *zap.SugaredLogger) {
+	if !em.Spec.Overrides.Workloads.GetByName(deploymentName).HasAtLeastOneWithReplicasSet() {
+		manifests.AddTransformers(
+			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
+				deploymentName,
+				namespace,
+				scaleTarget))
+	} else {
+		logger.Debugf("Skipping to scale %s deployment to %d, as a workload override for this deployment exists which sets the replicas already", deploymentName, scaleTarget)
+	}
 }
 
 // runPrechecks runs some prechecks before applying the manifests.

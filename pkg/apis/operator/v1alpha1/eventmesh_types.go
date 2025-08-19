@@ -103,7 +103,7 @@ type EventMeshSpecOverrides struct {
 	Config map[string]map[string]string `json:"config,omitempty"`
 
 	// +optional
-	Workloads []WorkloadOverride `json:"workloads,omitempty"`
+	Workloads WorkloadOverrides `json:"workloads,omitempty"`
 }
 
 type EventMeshStatus struct {
@@ -157,6 +157,30 @@ func (em *EventMesh) GetStatus() *duckv1.Status {
 
 func (ems *EventMeshSpec) GetFeatureFlags() (feature.Flags, error) {
 	return feature.NewFlagsConfigFromMap(ems.Features)
+}
+
+type WorkloadOverrides []WorkloadOverride
+
+func (wlos WorkloadOverrides) GetByName(name string) *WorkloadOverrides {
+	overrides := WorkloadOverrides{}
+
+	for _, override := range wlos {
+		if override.Name == name {
+			overrides = append(overrides, override)
+		}
+	}
+
+	return &overrides
+}
+
+func (wlos WorkloadOverrides) HasAtLeastOneWithReplicasSet() bool {
+	for _, override := range wlos {
+		if override.Replicas != nil {
+			return true
+		}
+	}
+
+	return false
 }
 
 // WorkloadOverride copied from https://github.com/knative/operator/blob/650497b2493703ac73d5b50ef2fbf70e5dc57bba/pkg/apis/operator/base/common.go#L274
