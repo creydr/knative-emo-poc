@@ -5,17 +5,24 @@ import (
 	"strings"
 
 	mf "github.com/manifestival/manifestival"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
+	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	"knative.dev/eventmesh-operator/pkg/manifests/transform"
+	"knative.dev/eventmesh-operator/pkg/utils"
 	"knative.dev/pkg/system"
 )
 
 // kafkaBrokerParser parses Kafka broker manifests
-type kafkaBrokerParser struct{}
+type kafkaBrokerParser struct {
+	crdLister apiextensionsv1.CustomResourceDefinitionLister
+}
 
 // NewKafkaBrokerParser creates a new Kafka broker manifest parser
-func NewKafkaBrokerParser() Parser {
-	return &kafkaBrokerParser{}
+func NewKafkaBrokerParser(crdLister apiextensionsv1.CustomResourceDefinitionLister) Parser {
+	return &kafkaBrokerParser{
+		crdLister: crdLister,
+	}
 }
 
 // Parse returns the configured manifests for Kafka broker
@@ -28,8 +35,11 @@ func (p *kafkaBrokerParser) Parse(em *v1alpha1.EventMesh) (*Manifests, error) {
 	}
 	manifests.Append(coreManifests)
 
-	// depending on EventMesh config, load additional manifests & Transformers
-	// ...
+	tlsManifests, err := p.eventingKafkaBrokerTLSManifests(em)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load EKB tls manifests: %w", err)
+	}
+	manifests.Append(tlsManifests)
 
 	return manifests, nil
 }
@@ -65,15 +75,26 @@ func (p *kafkaBrokerParser) eventingKafkaBrokerTLSManifests(em *v1alpha1.EventMe
 		return nil, fmt.Errorf("failed to load EKB TLS manifests: %w", err)
 	}
 
+	certManagerIsInstalled, err := utils.IsCertmanagerInstalled(p.crdLister)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if cert-manager is installed: %w", err)
+	}
+
 	features, err := em.Spec.GetFeatureFlags()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load feature flags: %w", err)
 	}
 
 	if !features.IsDisabledTransportEncryption() {
-		manifests.AddToApply(tlsManifests)
+		if certManagerIsInstalled {
+			manifests.AddToApply(tlsManifests)
+		} else {
+			return nil, fmt.Errorf("%s is set to %s, but cert-manager is not installed", feature.TransportEncryption, features[feature.TransportEncryption])
+		}
 	} else {
-		manifests.AddToDelete(tlsManifests)
+		if certManagerIsInstalled {
+			manifests.AddToDelete(tlsManifests)
+		}
 	}
 
 	return &manifests, nil
