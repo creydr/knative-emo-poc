@@ -40,11 +40,13 @@ import (
 )
 
 type Reconciler struct {
-	eventMeshLister  operatorv1alpha1listers.EventMeshLister
-	deploymentLister appsv1listers.DeploymentLister
-	scaler           *scaler.Scaler
-	manifest         mf.Manifest
-	crdLister        apiextensionsv1.CustomResourceDefinitionLister
+	eventMeshLister   operatorv1alpha1listers.EventMeshLister
+	deploymentLister  appsv1listers.DeploymentLister
+	scaler            *scaler.Scaler
+	manifest          mf.Manifest
+	crdLister         apiextensionsv1.CustomResourceDefinitionLister
+	eventingParser    knmf.Parser
+	kafkaBrokerParser knmf.Parser
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
@@ -66,7 +68,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 
 	// Get eventing manifests
 	logger.Debug("Loading eventing core manifests")
-	eventingManifests, err := knmf.ForEventing(em)
+	eventingManifests, err := r.eventingParser.Parse(em)
 	if err != nil {
 		return fmt.Errorf("failed to get eventing manifests: %w", err)
 	}
@@ -74,7 +76,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 
 	// Get EKB manifests
 	logger.Debug("Loading eventing-kafka-broker manifests")
-	ekbManifests, err := knmf.ForEventingKafkaBroker(em)
+	ekbManifests, err := r.kafkaBrokerParser.Parse(em)
 	if err != nil {
 		return fmt.Errorf("failed to get EKB manifests: %w", err)
 	}
