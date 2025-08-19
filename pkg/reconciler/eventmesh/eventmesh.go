@@ -19,12 +19,10 @@ package eventmesh
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	mf "github.com/manifestival/manifestival"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	"knative.dev/eventing/pkg/apis/feature"
@@ -108,9 +106,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 	// Delete old manifests
 	logger.Debug("Deleting unneeded manifests")
 	if err := r.manifest.Append(manifests.ToDelete).Delete(ctx, mf.IgnoreNotFound(true)); err != nil {
-		if !meta.IsNoMatchError(err) && !strings.Contains(err.Error(), "failed to get API group resources") {
-			return fmt.Errorf("failed to delete manifests: %w", err)
-		}
+		return fmt.Errorf("failed to delete manifests: %w", err)
 	}
 
 	// Apply manifests

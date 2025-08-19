@@ -4,16 +4,23 @@ import (
 	"fmt"
 
 	mf "github.com/manifestival/manifestival"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
+	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	"knative.dev/eventmesh-operator/pkg/manifests/transform"
+	"knative.dev/eventmesh-operator/pkg/utils"
 )
 
 // eventingParser parses eventing manifests
-type eventingParser struct{}
+type eventingParser struct {
+	crdLister apiextensionsv1.CustomResourceDefinitionLister
+}
 
 // NewEventingParser creates a new eventing manifest parser
-func NewEventingParser() Parser {
-	return &eventingParser{}
+func NewEventingParser(crdLister apiextensionsv1.CustomResourceDefinitionLister) Parser {
+	return &eventingParser{
+		crdLister: crdLister,
+	}
 }
 
 // Parse returns the configured manifests for eventing
@@ -105,16 +112,26 @@ func (p *eventingParser) eventingTLSManifests(em *v1alpha1.EventMesh) (*Manifest
 		return nil, fmt.Errorf("failed to load eventing TLS manifests: %w", err)
 	}
 
+	certManagerIsInstalled, err := utils.IsCertmanagerInstalled(p.crdLister)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if cert-manager is installed: %w", err)
+	}
+
 	features, err := em.Spec.GetFeatureFlags()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load feature flags: %w", err)
 	}
 
 	if !features.IsDisabledTransportEncryption() {
-		// here we need certmanager too
-		manifests.AddToApply(tlsManifests)
+		if certManagerIsInstalled {
+			manifests.AddToApply(tlsManifests)
+		} else {
+			return nil, fmt.Errorf("%s is set to %s, but cert-manager is not installed", feature.TransportEncryption, features[feature.TransportEncryption])
+		}
 	} else {
-		manifests.AddToDelete(tlsManifests)
+		if certManagerIsInstalled {
+			manifests.AddToDelete(tlsManifests)
+		}
 	}
 
 	return &manifests, nil

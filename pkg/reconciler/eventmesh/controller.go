@@ -39,7 +39,7 @@ func NewController(
 	mflogger := zapr.NewLogger(logger.Named("manifestival").Desugar())
 	manifest, _ := mf.ManifestFrom(mf.Slice{}, mf.UseClient(mfclient), mf.UseLogger(mflogger))
 
-	eventingParser := manifests.NewEventingParser()
+	eventingParser := manifests.NewEventingParser(crdInformer.Lister())
 	kafkaBrokerParser := manifests.NewKafkaBrokerParser()
 
 	r := &Reconciler{
