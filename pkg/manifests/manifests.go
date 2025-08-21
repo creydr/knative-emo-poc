@@ -5,13 +5,7 @@ import (
 	"os"
 
 	mf "github.com/manifestival/manifestival"
-	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 )
-
-// Parser parses manifests for different components
-type Parser interface {
-	Parse(em *v1alpha1.EventMesh) (*Manifests, error)
-}
 
 type Manifests struct {
 	ToApply      mf.Manifest
