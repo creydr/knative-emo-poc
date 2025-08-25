@@ -22,16 +22,20 @@ import (
 
 	mf "github.com/manifestival/manifestival"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 	eventmeshreconciler "knative.dev/eventmesh-operator/pkg/client/injection/reconciler/operator/v1alpha1/eventmesh"
 	operatorv1alpha1listers "knative.dev/eventmesh-operator/pkg/client/listers/operator/v1alpha1"
-	knmf "knative.dev/eventmesh-operator/pkg/manifests"
+	"knative.dev/eventmesh-operator/pkg/manifests"
 	"knative.dev/eventmesh-operator/pkg/manifests/transform"
+	"knative.dev/eventmesh-operator/pkg/reconciler/common"
 	"knative.dev/eventmesh-operator/pkg/scaler"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/reconciler"
@@ -44,16 +48,14 @@ type Reconciler struct {
 	scaler            *scaler.Scaler
 	manifest          mf.Manifest
 	crdLister         apiextensionsv1.CustomResourceDefinitionLister
-	eventingParser    knmf.Parser
-	kafkaBrokerParser knmf.Parser
+	eventingParser    manifests.Parser
+	kafkaBrokerParser manifests.Parser
 }
 
 // Check that our Reconciler implements eventmeshreconciler.Interface
 var _ eventmeshreconciler.Interface = (*Reconciler)(nil)
 
 func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) reconciler.Event {
-	logger := logging.FromContext(ctx)
-
 	precheckOk, err := r.runPrechecks(ctx, em)
 	if err != nil {
 		return fmt.Errorf("could not run prechecks: %w", err)
@@ -63,60 +65,39 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 		return nil
 	}
 
-	manifests := knmf.Manifests{}
+	stages := common.Stages{
+		// TODO: run prechecks as part of this pipeline
 
-	// Get eventing manifests
-	logger.Debug("Loading eventing core manifests")
-	eventingManifests, err := r.eventingParser.Parse(em)
+		// load manifests
+		manifests.AppendFromParser(ctx, r.eventingParser),
+		manifests.AppendFromParser(ctx, r.kafkaBrokerParser),
+
+		// apply scaling
+		r.applyScaling,
+
+		// add owner reference transformer
+		r.addOwnerReference,
+
+		// run transformers
+		manifests.Transform,
+
+		// install (delete + apply + post-install on upgrade)
+		manifests.Install(r.manifest),
+
+		// wait for ready
+		r.checkDeployments,
+	}
+
+	err = stages.Execute(ctx, em)
 	if err != nil {
-		return fmt.Errorf("failed to get eventing manifests: %w", err)
-	}
-	manifests.Append(eventingManifests)
-
-	// Get EKB manifests
-	logger.Debug("Loading eventing-kafka-broker manifests")
-	ekbManifests, err := r.kafkaBrokerParser.Parse(em)
-	if err != nil {
-		return fmt.Errorf("failed to get EKB manifests: %w", err)
-	}
-	manifests.Append(ekbManifests)
-
-	if err := r.applyScaling(ctx, em, &manifests); err != nil {
-		return fmt.Errorf("failed to apply Scaling: %w", err)
+		if common.IsNonRecoverableError(err) {
+			// it doesn't make sense to retrigger a reconcile on non-recoverable errors
+			return nil
+		}
+		return err
 	}
 
-	// Add owner reference to EventMesh CR
-	// TODO: fix (somehow the GVK of the em are empty)
-	emCopy := em.DeepCopy()
-	emCopy.SetGroupVersionKind(v1alpha1.SchemeGroupVersion.WithKind("EventMesh"))
-	manifests.AddTransformers(transform.InjectOwner(emCopy)) // use our own InjectOwners to keep the namespace clean
-
-	// Apply patches at the end when all manifests are loaded
-	logger.Debug("Applying patches to manifests")
-	if err := manifests.TransformToApply(); err != nil {
-		return fmt.Errorf("failed to transform eventing manifests to apply: %w", err)
-	}
-	// also run the transformers on the manifests which gets deleted, in case some metadata were patched before they were applied
-	if err := manifests.TransformToDelete(); err != nil {
-		return fmt.Errorf("failed to transform eventing manifests to delete: %w", err)
-	}
-
-	logger.Debug("Sort manifests for k8s order")
-	manifests.Sort()
-
-	// Delete old manifests
-	logger.Debugf("Deleting unneeded manifests (%d)", len(manifests.ToDelete.Resources()))
-	if err := r.manifest.Append(manifests.ToDelete).Delete(ctx, mf.IgnoreNotFound(true)); err != nil {
-		return fmt.Errorf("failed to delete manifests: %w", err)
-	}
-
-	// Apply manifests
-	logger.Debug("Applying manifests")
-	if err := r.manifest.Append(manifests.ToApply).Apply(ctx); err != nil {
-		return fmt.Errorf("failed to apply manifests: %w", err)
-	}
-
-	em.Status.MarkEventMeshConditionEventMeshInstalled()
+	em.Status.MarkInstallSucceeded()
 
 	return nil
 }
@@ -149,19 +130,19 @@ func (r *Reconciler) hasForeignEventingInstalled(ctx context.Context, em *v1alph
 	return true, nil
 }
 
-func (r *Reconciler) applyScaling(ctx context.Context, em *v1alpha1.EventMesh, manifests *knmf.Manifests) error {
-	if err := r.applyScalingForIMC(ctx, em, manifests); err != nil {
+func (r *Reconciler) applyScaling(ctx context.Context, manifests *manifests.Manifests, em *v1alpha1.EventMesh) error {
+	if err := r.applyScalingForIMC(ctx, manifests, em); err != nil {
 		return fmt.Errorf("failed to apply Scaling for IMC: %w", err)
 	}
 
-	if err := r.applyScalingForMTBroker(ctx, em, manifests); err != nil {
+	if err := r.applyScalingForMTBroker(ctx, manifests, em); err != nil {
 		return fmt.Errorf("failed to apply Scaling for MT broker: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Reconciler) applyScalingForIMC(ctx context.Context, em *v1alpha1.EventMesh, manifests *knmf.Manifests) error {
+func (r *Reconciler) applyScalingForIMC(ctx context.Context, manifests *manifests.Manifests, em *v1alpha1.EventMesh) error {
 	logger := logging.FromContext(ctx).With("scaler", "imc")
 
 	imcScaleTarget, err := r.scaler.IMCScaleTarget()
@@ -178,7 +159,7 @@ func (r *Reconciler) applyScalingForIMC(ctx context.Context, em *v1alpha1.EventM
 	return nil
 }
 
-func (r *Reconciler) applyScalingForMTBroker(ctx context.Context, em *v1alpha1.EventMesh, manifests *knmf.Manifests) error {
+func (r *Reconciler) applyScalingForMTBroker(ctx context.Context, manifests *manifests.Manifests, em *v1alpha1.EventMesh) error {
 	logger := logging.FromContext(ctx).With("scaler", "mt-broker")
 
 	mtBrokerScaleTarget, err := r.scaler.MTBrokerScaleTarget()
@@ -196,7 +177,7 @@ func (r *Reconciler) applyScalingForMTBroker(ctx context.Context, em *v1alpha1.E
 	return nil
 }
 
-func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleTarget int64, manifests *knmf.Manifests, em *v1alpha1.EventMesh, logger *zap.SugaredLogger) {
+func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleTarget int64, manifests *manifests.Manifests, em *v1alpha1.EventMesh, logger *zap.SugaredLogger) {
 	if !em.Spec.Overrides.Workloads.GetByName(deploymentName).HasAtLeastOneWithReplicasSet() {
 
 		if scaleTarget == 0 {
@@ -226,7 +207,7 @@ func addHPATransformerIfNeeded(hpaName, deploymentName, namespace string, scaleT
 	}
 }
 
-func addDeploymentScaleTransformerIfNeeded(deploymentName, namespace string, scaleTarget int64, manifests *knmf.Manifests, em *v1alpha1.EventMesh, logger *zap.SugaredLogger) {
+func addDeploymentScaleTransformerIfNeeded(deploymentName, namespace string, scaleTarget int64, manifests *manifests.Manifests, em *v1alpha1.EventMesh, logger *zap.SugaredLogger) {
 	if !em.Spec.Overrides.Workloads.GetByName(deploymentName).HasAtLeastOneWithReplicasSet() {
 		manifests.AddTransformers(
 			transform.Scale(schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
@@ -247,7 +228,7 @@ func (r *Reconciler) runPrechecks(ctx context.Context, em *v1alpha1.EventMesh) (
 		return false, fmt.Errorf("could not determine whether EventMesh is installed already: %v", err)
 	}
 	if alreadyInstalled {
-		em.Status.MarkEventMeshConditionEventMeshInstalledFalse("EventingInstalledAlready", "Knative eventing components seem to be installed already and not owned by the EventMesh")
+		em.Status.MarkInstallFailed("EventingInstalledAlready", "Knative eventing components seem to be installed already and not owned by the EventMesh")
 		return false, nil
 	}
 
@@ -263,7 +244,7 @@ func (r *Reconciler) runPrechecks(ctx context.Context, em *v1alpha1.EventMesh) (
 			return false, fmt.Errorf("could not determine whether cert-manager is installed: %v", err)
 		}
 		if !certManagerInstalled {
-			em.Status.MarkEventMeshConditionEventMeshInstalledFalse("CertManagerRequired", "Feature %s is enabled, but cert-manager seems not to be installed", feature.TransportEncryption)
+			em.Status.MarkInstallFailed("CertManagerRequired", "Feature %s is enabled, but cert-manager seems not to be installed", feature.TransportEncryption)
 			return false, nil
 		}
 	}
@@ -273,6 +254,8 @@ func (r *Reconciler) runPrechecks(ctx context.Context, em *v1alpha1.EventMesh) (
 }
 
 func (r *Reconciler) hasCertManagerInstalled() (bool, error) {
+	// TODO: migrate usages to use util.IsCertmanagerInstalled() instead
+
 	_, err := r.crdLister.Get("certificates.cert-manager.io")
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -282,4 +265,49 @@ func (r *Reconciler) hasCertManagerInstalled() (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (r *Reconciler) addOwnerReference(ctx context.Context, manifests *manifests.Manifests, em *v1alpha1.EventMesh) error {
+	// TODO: fix (somehow the GVK of the em are empty)
+	emCopy := em.DeepCopy()
+	emCopy.SetGroupVersionKind(v1alpha1.SchemeGroupVersion.WithKind("EventMesh"))
+	manifests.AddTransformers(transform.InjectOwner(emCopy)) // use our own InjectOwners to keep the namespace clean
+
+	return nil
+}
+
+func (r *Reconciler) checkDeployments(ctx context.Context, manifests *manifests.Manifests, em *v1alpha1.EventMesh) error {
+	var nonReadyDeployments []string
+	for _, u := range manifests.ToApply.Filter(mf.ByKind("Deployment")).Resources() {
+		deployment, err := r.deploymentLister.Deployments(u.GetNamespace()).Get(u.GetName())
+		if err != nil {
+			em.Status.MarkDeploymentsNotReady([]string{"all"})
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+
+			return fmt.Errorf("failed to get deployment %s/%s: %w", u.GetNamespace(), u.GetName(), err)
+		}
+
+		if !isDeploymentAvailable(deployment) {
+			nonReadyDeployments = append(nonReadyDeployments, deployment.Name)
+		}
+	}
+
+	if len(nonReadyDeployments) > 0 {
+		em.Status.MarkDeploymentsNotReady(nonReadyDeployments)
+		return common.DeploymentsNotReadyError{}
+	}
+
+	em.Status.MarkDeploymentsAvailable()
+	return nil
+}
+
+func isDeploymentAvailable(d *appsv1.Deployment) bool {
+	for _, c := range d.Status.Conditions {
+		if c.Type == appsv1.DeploymentAvailable && c.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }

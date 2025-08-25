@@ -5,17 +5,12 @@ import (
 	"os"
 
 	mf "github.com/manifestival/manifestival"
-	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
 )
-
-// Parser parses manifests for different components
-type Parser interface {
-	Parse(em *v1alpha1.EventMesh) (*Manifests, error)
-}
 
 type Manifests struct {
 	ToApply      mf.Manifest
 	ToDelete     mf.Manifest
+	PostInstall  mf.Manifest
 	Transformers []mf.Transformer
 }
 
@@ -25,6 +20,10 @@ func (m *Manifests) AddToApply(manifests mf.Manifest) {
 
 func (m *Manifests) AddToDelete(manifests mf.Manifest) {
 	m.ToDelete = m.ToDelete.Append(manifests)
+}
+
+func (m *Manifests) AddToPostInstall(manifests mf.Manifest) {
+	m.PostInstall = m.PostInstall.Append(manifests)
 }
 
 func (m *Manifests) AddTransformers(transformers ...mf.Transformer) {
@@ -51,14 +50,30 @@ func (m *Manifests) TransformToDelete() error {
 	return nil
 }
 
+func (m *Manifests) TransformPostInstall() error {
+	patched, err := m.PostInstall.Transform(m.Transformers...)
+	if err != nil {
+		return fmt.Errorf("failed to transform eventing post-install manifests: %w", err)
+	}
+	m.PostInstall = patched
+
+	return nil
+}
+
 func (m *Manifests) Sort() {
 	m.ToApply = m.ToApply.Sort(mf.ByKindPriority())
 	m.ToDelete = m.ToDelete.Sort(mf.ByKindPriority()) //sort it here. m.Delete() will delete in reverse order
+	m.PostInstall = m.PostInstall.Sort(mf.ByKindPriority())
 }
 
 func (m *Manifests) Append(manifests *Manifests) {
+	if manifests == nil {
+		return
+	}
+
 	m.AddToApply(manifests.ToApply)
 	m.AddToDelete(manifests.ToDelete)
+	m.AddToPostInstall(manifests.PostInstall)
 	m.AddTransformers(manifests.Transformers...)
 }
 

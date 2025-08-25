@@ -44,4 +44,4 @@ group "Update deps post-codegen"
 ${REPO_ROOT_DIR}/hack/update-deps.sh
 
 # Make sure our nightly yamls are up-to-date
-${REPO_ROOT_DIR}/hack/update-nightlies.sh
+${REPO_ROOT_DIR}/hack/update-eventing-manifests.sh

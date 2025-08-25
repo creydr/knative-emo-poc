@@ -1,6 +1,7 @@
 package manifests
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -26,7 +27,7 @@ func NewKafkaBrokerParser(crdLister apiextensionsv1.CustomResourceDefinitionList
 }
 
 // Parse returns the configured manifests for Kafka broker
-func (p *kafkaBrokerParser) Parse(em *v1alpha1.EventMesh) (*Manifests, error) {
+func (p *kafkaBrokerParser) Parse(ctx context.Context, em *v1alpha1.EventMesh) (*Manifests, error) {
 	manifests := &Manifests{}
 
 	coreManifests, err := p.eventingKafkaBrokerCoreManifests(em)
