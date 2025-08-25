@@ -9,9 +9,9 @@ import (
 	"knative.dev/pkg/logging"
 )
 
-func AppendFromParser(parser Parser) func(context.Context, *Manifests, *v1alpha1.EventMesh) error {
+func AppendFromParser(ctx context.Context, parser Parser) func(context.Context, *Manifests, *v1alpha1.EventMesh) error {
 	return func(ctx context.Context, manifests *Manifests, em *v1alpha1.EventMesh) error {
-		loadedManifests, err := parser.Parse(em)
+		loadedManifests, err := parser.Parse(ctx, em)
 		if err != nil {
 			return fmt.Errorf("failed to get eventing manifests: %w", err)
 		}
@@ -32,6 +32,10 @@ func Transform(ctx context.Context, manifests *Manifests, em *v1alpha1.EventMesh
 	// also run the transformers on the manifests which gets deleted, in case some metadata were patched before they were applied
 	if err := manifests.TransformToDelete(); err != nil {
 		return fmt.Errorf("failed to transform manifests to delete: %w", err)
+	}
+
+	if err := manifests.TransformPostInstall(); err != nil {
+		return fmt.Errorf("failed to transform post-install manifests: %w", err)
 	}
 
 	return nil
@@ -56,7 +60,11 @@ func Install(baseManifest mf.Manifest) func(ctx context.Context, manifests *Mani
 			return fmt.Errorf("failed to apply manifests: %w", err)
 		}
 
-		// TODO: apply post install
+		// Install post-install manifests
+		logger.Debugf("Applying post-install manifests (%d)", len(manifests.PostInstall.Resources()))
+		if err := baseManifest.Append(manifests.PostInstall).Apply(ctx); err != nil {
+			return fmt.Errorf("failed to apply post-install manifests: %w", err)
+		}
 
 		return nil
 	}

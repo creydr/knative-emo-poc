@@ -69,8 +69,8 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, em *v1alpha1.EventMesh) 
 		// TODO: run prechecks as part of this pipeline
 
 		// load manifests
-		manifests.AppendFromParser(r.eventingParser),
-		manifests.AppendFromParser(r.kafkaBrokerParser),
+		manifests.AppendFromParser(ctx, r.eventingParser),
+		manifests.AppendFromParser(ctx, r.kafkaBrokerParser),
 
 		// apply scaling
 		r.applyScaling,
@@ -254,6 +254,8 @@ func (r *Reconciler) runPrechecks(ctx context.Context, em *v1alpha1.EventMesh) (
 }
 
 func (r *Reconciler) hasCertManagerInstalled() (bool, error) {
+	// TODO: migrate usages to use util.IsCertmanagerInstalled() instead
+
 	_, err := r.crdLister.Get("certificates.cert-manager.io")
 	if err != nil {
 		if errors.IsNotFound(err) {
