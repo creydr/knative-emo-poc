@@ -6,7 +6,6 @@ import (
 
 	mf "github.com/manifestival/manifestival"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	"knative.dev/eventing/pkg/apis/feature"
 	"knative.dev/eventmesh-operator/pkg/apis/operator/v1alpha1"
@@ -150,7 +149,7 @@ func (p *eventingParser) eventingTLSManifests(ctx context.Context, em *v1alpha1.
 func (p *eventingParser) eventingPostInstallManifests(ctx context.Context, em *v1alpha1.EventMesh, manifests *Manifests) (*Manifests, error) {
 	logger := logging.FromContext(ctx)
 
-	upgrade, err := p.isUpgrade(manifests.ToApply)
+	upgrade, err := isUpgrade(manifests.ToApply, p.deploymentLister)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if this is an upgrade: %w", err)
 	}
@@ -172,23 +171,6 @@ func (p *eventingParser) eventingPostInstallManifests(ctx context.Context, em *v
 	logger.Debug("Skipping to add post-install manifests, as no (at least) minor version upgrade is ongoing")
 
 	return nil, nil
-}
-
-func (p *eventingParser) isUpgrade(manifests mf.Manifest) (bool, error) {
-	manifestVersion, instanceVersion, err := getVersions(manifests, p.deploymentLister)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// this indicates, that none of the deployments from the manifests exists already in the cluster
-			return false, nil
-		}
-
-		return false, fmt.Errorf("failed to get versions: %w", err)
-	}
-
-	manifestVersion.Patch = 0
-	instanceVersion.Patch = 0
-
-	return instanceVersion.LessThan(*manifestVersion), nil
 }
 
 func (p *eventingParser) loadEventingCoreManifests() (mf.Manifest, error) {

@@ -63,3 +63,20 @@ func getVersions(manifests mf.Manifest, deploymentLister appsv1listers.Deploymen
 
 	return manifestVersion, instanceVersion, nil
 }
+
+func isUpgrade(manifests mf.Manifest, deploymentLister appsv1listers.DeploymentLister) (bool, error) {
+	manifestVersion, instanceVersion, err := getVersions(manifests, deploymentLister)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// this indicates, that none of the deployments from the manifests exists already in the cluster
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to get versions: %w", err)
+	}
+
+	manifestVersion.Patch = 0
+	instanceVersion.Patch = 0
+
+	return instanceVersion.LessThan(*manifestVersion), nil
+}

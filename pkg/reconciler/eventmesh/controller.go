@@ -40,7 +40,7 @@ func NewController(
 	manifest, _ := mf.ManifestFrom(mf.Slice{}, mf.UseClient(mfclient), mf.UseLogger(mflogger))
 
 	eventingParser := manifests.NewEventingParser(crdInformer.Lister(), deploymentInformer.Lister())
-	kafkaBrokerParser := manifests.NewKafkaBrokerParser(crdInformer.Lister())
+	kafkaBrokerParser := manifests.NewKafkaBrokerParser(crdInformer.Lister(), deploymentInformer.Lister())
 
 	r := &Reconciler{
 		eventMeshLister:   eventMeshInformer.Lister(),
