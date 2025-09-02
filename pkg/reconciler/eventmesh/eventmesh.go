@@ -233,7 +233,7 @@ func (r *Reconciler) runPrechecks(ctx context.Context, em *v1alpha1.EventMesh) (
 	}
 
 	// check if transport-encryption is enabled and required cert-manager is installed
-	featuresFlags, err := em.Spec.GetFeatureFlags()
+	featuresFlags, err := em.Spec.Features.GetEventingFeatureFlags()
 	if err != nil {
 		return false, fmt.Errorf("could not get feature flags: %v", err)
 	}

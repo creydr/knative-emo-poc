@@ -76,7 +76,7 @@ type EventMeshSpec struct {
 	DefaultChannel string `json:"defaultChannel,omitempty"`
 
 	// +optional
-	Features map[string]string `json:"features,omitempty"`
+	Features *EventMeshSpecFeatures `json:"features,omitempty"`
 
 	// +optional
 	Overrides *EventMeshSpecOverrides `json:"overrides,omitempty"`
@@ -96,6 +96,11 @@ type EventMeshSpecKafka struct {
 
 	// +optional
 	TopicConfigOptions map[string]string `json:"topicConfigOptions,omitempty"`
+}
+
+type EventMeshSpecFeatures struct {
+	Eventing            map[string]string `json:"eventing,omitempty"`
+	EventingKafkaBroker map[string]string `json:"eventingKafkaBroker,omitempty"`
 }
 
 type EventMeshSpecOverrides struct {
@@ -155,8 +160,12 @@ func (em *EventMesh) GetStatus() *duckv1.Status {
 	return &em.Status.Status
 }
 
-func (ems *EventMeshSpec) GetFeatureFlags() (feature.Flags, error) {
-	return feature.NewFlagsConfigFromMap(ems.Features)
+func (ems *EventMeshSpecFeatures) GetEventingFeatureFlags() (feature.Flags, error) {
+	if ems == nil {
+		return feature.NewFlagsConfigFromMap(nil)
+	}
+
+	return feature.NewFlagsConfigFromMap(ems.Eventing)
 }
 
 type WorkloadOverrides []WorkloadOverride

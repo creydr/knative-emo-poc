@@ -69,6 +69,7 @@ func (p *kafkaBrokerParser) eventingKafkaBrokerCoreManifests(em *v1alpha1.EventM
 
 	manifests.AddTransformers(
 		transform.KafkaLogging(em.Spec.LogLevel),
+		transform.EventingKafkaBrokerFeatureFlags(em.Spec.Features),
 		transform.BootstrapServers(em.Spec.Kafka.BootstrapServers),
 		transform.NumberOfPartitions(em.Spec.Kafka.NumPartitions),
 		transform.ReplicationFactor(em.Spec.Kafka.ReplicationFactor),
@@ -91,7 +92,7 @@ func (p *kafkaBrokerParser) eventingKafkaBrokerTLSManifests(em *v1alpha1.EventMe
 		return nil, fmt.Errorf("failed to check if cert-manager is installed: %w", err)
 	}
 
-	features, err := em.Spec.GetFeatureFlags()
+	features, err := em.Spec.Features.GetEventingFeatureFlags()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load feature flags: %w", err)
 	}

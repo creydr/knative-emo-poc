@@ -44,7 +44,13 @@ spec:
                   type: string
                 features:
                   type: object
-                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    eventing:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    eventingKafkaBroker:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
                 kafka:
                   type: object
                   properties:
