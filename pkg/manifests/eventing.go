@@ -78,7 +78,7 @@ func (p *eventingParser) eventingCoreManifests(ctx context.Context, em *v1alpha1
 		transform.EventingCoreLogging(em.Spec.LogLevel),
 		transform.DefaultChannelImplementation(em.Spec.DefaultChannel),
 		transform.DefaultBrokerClass(em.Spec.DefaultBroker, em.Spec.DefaultChannel),
-		transform.FeatureFlags(em.Spec.Features),
+		transform.EventingFeatureFlags(em.Spec.Features),
 		transform.ConfigMapOverride(em.Spec.Overrides.Config),
 		transform.WorkloadsOverride(em.Spec.Overrides.Workloads))
 
@@ -126,7 +126,7 @@ func (p *eventingParser) eventingTLSManifests(ctx context.Context, em *v1alpha1.
 		return nil, fmt.Errorf("failed to check if cert-manager is installed: %w", err)
 	}
 
-	features, err := em.Spec.GetFeatureFlags()
+	features, err := em.Spec.Features.GetEventingFeatureFlags()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load feature flags: %w", err)
 	}

@@ -9,7 +9,6 @@ require (
 	github.com/manifestival/client-go-client v0.6.1-0.20240501171814-824fb1db1ad3
 	github.com/manifestival/manifestival v0.7.3-0.20250813125316-0dc94ac5594b
 	go.uber.org/zap v1.27.0
-	golang.org/x/mod v0.25.0
 	k8s.io/api v0.33.1
 	k8s.io/apiextensions-apiserver v0.33.1
 	k8s.io/apimachinery v0.33.1
@@ -88,6 +87,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
